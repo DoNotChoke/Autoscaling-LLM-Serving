@@ -1,0 +1,497 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>GPU LLM Serving Platform</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: một trang tài liệu kỹ thuật; sơ đồ rộng cuộn ngang trên màn hình nhỏ, các bảng bên dưới. */
+:root {
+  --bg: #f3f5f8;
+  --fg: #14202b;
+  --muted: #566677;
+  --line: #bcc7d3;
+  --line-soft: #d3dbe4;
+  --card: #ffffff;
+  --card-grp: #f9fbfd;
+  --cluster: #eef2f6;
+  --ext-bg: #f6f7f9;
+  --p-serve: #e7effd;
+  --p-scale: #fcefdf;
+  --p-obs: #e3f3ea;
+  --chip: #14202b;
+  --chip-fg: #f3f5f8;
+  --c-req: #2358d6;
+  --c-met: #7340c2;
+  --c-act: #c2610a;
+  --c-log: #187a53;
+  --c-ext: #5d6c7b;
+  --code-bg: #0f1a24;
+  --code-fg: #dbe6f0;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e151d; --fg: #e5ecf3; --muted: #93a4b5; --line: #3a4a5a; --line-soft: #2a3846;
+    --card: #17222e; --card-grp: #121c26; --cluster: #0b1118; --ext-bg: #121b25;
+    --p-serve: #11233f; --p-scale: #33210f; --p-obs: #0e2a21;
+    --chip: #e5ecf3; --chip-fg: #0e151d;
+    --c-req: #7aa7ff; --c-met: #bc9cf5; --c-act: #f2a553; --c-log: #52d3a3; --c-ext: #90a2b4;
+    --code-bg: #0a1017; --code-fg: #dbe6f0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e151d; --fg: #e5ecf3; --muted: #93a4b5; --line: #3a4a5a; --line-soft: #2a3846;
+  --card: #17222e; --card-grp: #121c26; --cluster: #0b1118; --ext-bg: #121b25;
+  --p-serve: #11233f; --p-scale: #33210f; --p-obs: #0e2a21;
+  --chip: #e5ecf3; --chip-fg: #0e151d;
+  --c-req: #7aa7ff; --c-met: #bc9cf5; --c-act: #f2a553; --c-log: #52d3a3; --c-ext: #90a2b4;
+  --code-bg: #0a1017; --code-fg: #dbe6f0;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 400 15px/1.6 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+header { display: flex; flex-direction: column; gap: 10px; max-width: 78ch; }
+.eyebrow { font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 600 clamp(26px, 4vw, 38px)/1.15 var(--sans); margin: 0; text-wrap: balance; }
+h2 { font: 600 21px/1.3 var(--sans); margin: 0 0 14px; text-wrap: balance; }
+h3 { font: 600 15px/1.35 var(--sans); margin: 0 0 8px; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 16px; }
+section { min-width: 0; }
+.scroll { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--card-grp); }
+.diagram { display: block; width: 100%; min-width: 980px; height: auto; }
+.cap { color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+/* SVG */
+.cluster { fill: var(--cluster); stroke: var(--line); stroke-width: 1.5; }
+.panel { stroke: var(--line-soft); stroke-width: 1; }
+.p-serve { fill: var(--p-serve); } .p-scale { fill: var(--p-scale); } .p-obs { fill: var(--p-obs); }
+.pt { font: 600 10.5px var(--sans); letter-spacing: .12em; fill: var(--muted); }
+.card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+.card.grp { fill: var(--card-grp); }
+.card.ext { fill: var(--ext-bg); }
+.t { font: 600 12.5px var(--sans); fill: var(--fg); }
+.s { font: 400 10.5px var(--sans); fill: var(--muted); }
+.s.mono { font: 400 10px var(--mono); }
+.chip { fill: var(--chip); }
+.chipt { font: 600 9px var(--mono); fill: var(--chip-fg); }
+.ln { fill: none; stroke-width: 1.8; stroke-linejoin: round; }
+.ln-req { stroke: var(--c-req); } .ln-met { stroke: var(--c-met); } .ln-act { stroke: var(--c-act); }
+.ln-log { stroke: var(--c-log); } .ln-ext { stroke: var(--c-ext); }
+.lb { font: 500 10px var(--sans); fill: var(--muted); }
+.lb-met { fill: var(--c-met); } .lb-act { fill: var(--c-act); } .lb-log { fill: var(--c-log); } .lb-req { fill: var(--c-req); }
+
+/* Flows */
+.flows { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.flow { background: var(--card); border: 1px solid var(--line-soft); border-top: 3px solid var(--fc); border-radius: 8px; padding: 14px 16px 16px; min-width: 0; }
+.flow h3 { color: var(--fc); }
+.flow ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+.f-req { --fc: var(--c-req); } .f-met { --fc: var(--c-met); } .f-act { --fc: var(--c-act); } .f-log { --fc: var(--c-log); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 720px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); }
+th { font: 600 11px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); background: var(--card-grp); position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: var(--muted); font-weight: 500; min-width: 92px; }
+td b { font-weight: 600; }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+td code { background: var(--card-grp); border: 1px solid var(--line-soft); border-radius: 4px; padding: 1px 5px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--card); }
+
+/* Code */
+.codes { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; }
+.codeblock { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.codeblock .tag { font: 500 12px var(--sans); color: var(--muted); }
+pre { margin: 0; background: var(--code-bg); color: var(--code-fg); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font: 400 12.5px/1.55 var(--mono); }
+pre code { font: inherit; background: none; border: 0; padding: 0; }
+
+ul.risks { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+ul.risks li { background: var(--card); border: 1px solid var(--line-soft); border-radius: 8px; padding: 12px 14px; min-width: 0; font-size: 14px; }
+ul.risks b { display: block; margin-bottom: 2px; }
+.note { max-width: 78ch; color: var(--muted); font-size: 13.5px; margin-top: 10px; }
+a:focus-visible, .scroll:focus-visible, .tablewrap:focus-visible, pre:focus-visible { outline: 2px solid var(--c-req); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Kiến trúc đề xuất · mở rộng từ Hình 6.7, LLMs in Production</div>
+    <h1>GPU LLM Serving Platform</h1>
+    <p class="lede">Giữ nguyên lõi của sách (DCGM → Prometheus → KEDA → HPA → Deployment, Grafana để quan sát), rồi thêm model server (KServe hoặc Ray Serve chạy vLLM), gateway, scale node GPU, logging bằng Loki và các thành phần vận hành.</p>
+  </header>
+
+  <section aria-labelledby="h-diagram">
+    <h2 id="h-diagram">Sơ đồ tổng thể</h2>
+    <div class="scroll" tabindex="0" role="region" aria-label="Sơ đồ kiến trúc, cuộn ngang nếu màn hình hẹp">
+<svg class="diagram" viewBox="0 0 1280 830" role="img" aria-labelledby="dg-t dg-d" xmlns="http://www.w3.org/2000/svg">
+<title id="dg-t">Kiến trúc GPU LLM Serving với autoscaling</title>
+<desc id="dg-d">Client đi qua gateway vào KServe hoặc Ray Serve chạy vLLM trên GPU node. DCGM và vLLM xuất metrics cho Prometheus, KEDA đọc Prometheus để điều khiển HPA, Karpenter thêm GPU node. Alloy gửi log về Loki, Grafana đọc Prometheus, Loki và Tempo.</desc>
+<defs>
+<marker id="m-req" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--c-req)"/></marker>
+<marker id="m-met" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--c-met)"/></marker>
+<marker id="m-act" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--c-act)"/></marker>
+<marker id="m-log" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--c-log)"/></marker>
+<marker id="m-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--c-ext)"/></marker>
+</defs>
+<rect class="cluster" x="14" y="84" width="1252" height="622" rx="14"/>
+<text class="pt" x="1250" y="102" text-anchor="end">KUBERNETES CLUSTER</text>
+<rect class="card ext" x="30" y="10" width="190" height="52" rx="6"/>
+<text class="t" x="40" y="28">Client / ứng dụng</text>
+<text class="s" x="40" y="44">OpenAI-compatible API</text>
+<rect class="card ext" x="980" y="10" width="270" height="52" rx="6"/>
+<text class="t" x="990" y="28">Slack · PagerDuty</text>
+<text class="s" x="990" y="44">on-call nhận cảnh báo</text>
+<rect class="card" x="46" y="108" width="368" height="50" rx="6"/>
+<text class="t" x="56" y="126">Envoy AI Gateway (Gateway API)</text>
+<text class="s" x="56" y="142">authN · token rate-limit · routing · retry</text>
+<rect class="panel p-serve" x="30" y="176" width="400" height="508" rx="10"/>
+<text class="pt" x="46" y="196">SERVING PLANE · GPU</text>
+<rect class="panel p-scale" x="490" y="176" width="360" height="508" rx="10"/>
+<text class="pt" x="506" y="196">METRICS &amp; AUTOSCALING</text>
+<rect class="panel p-obs" x="910" y="176" width="340" height="508" rx="10"/>
+<text class="pt" x="926" y="196">OBSERVABILITY</text>
+<rect class="card grp" x="46" y="214" width="368" height="196" rx="8"/>
+<text class="t" x="56" y="232">A · KServe InferenceService + vLLM</text>
+<text class="s" x="56" y="247">controller tạo Deployment + ScaledObject (KEDA)</text>
+<rect class="card pod" x="56" y="266" width="108" height="96" rx="6"/>
+<rect class="chip" x="64" y="274" width="32" height="16" rx="3"/>
+<text class="chipt" x="80" y="285.5" text-anchor="middle">GPU</text>
+<text class="t" x="66" y="316">vLLM pod 1</text>
+<text class="s mono" x="66" y="332">:8000/metrics</text>
+<text class="s" x="66" y="348">cont. batching</text>
+<rect class="card pod" x="176" y="266" width="108" height="96" rx="6"/>
+<rect class="chip" x="184" y="274" width="32" height="16" rx="3"/>
+<text class="chipt" x="200" y="285.5" text-anchor="middle">GPU</text>
+<text class="t" x="186" y="316">vLLM pod 2</text>
+<text class="s mono" x="186" y="332">:8000/metrics</text>
+<text class="s" x="186" y="348">cont. batching</text>
+<rect class="card pod" x="296" y="266" width="108" height="96" rx="6"/>
+<rect class="chip" x="304" y="274" width="32" height="16" rx="3"/>
+<text class="chipt" x="320" y="285.5" text-anchor="middle">GPU</text>
+<text class="t" x="306" y="316">vLLM pod 3</text>
+<text class="s mono" x="306" y="332">:8000/metrics</text>
+<text class="s" x="306" y="348">cont. batching</text>
+<text class="s mono" x="56" y="384">serving.kserve.io/autoscalerClass: keda</text>
+<rect class="card grp" x="46" y="426" width="368" height="130" rx="8" stroke-dasharray="5 4"/>
+<text class="t" x="56" y="444">B · KubeRay RayService (Ray Serve)</text>
+<text class="s" x="56" y="459">replica autoscaling: target_ongoing_requests</text>
+<rect class="card pod" x="56" y="476" width="96" height="62" rx="6"/>
+<text class="t" x="66" y="498">Ray head</text>
+<text class="s" x="66" y="514">Serve controller</text>
+<rect class="card pod" x="162" y="476" width="116" height="62" rx="6"/>
+<text class="t" x="172" y="498">GPU worker</text>
+<text class="s" x="172" y="514">vLLM replica</text>
+<rect class="chip" x="172" y="522" width="32" height="12" rx="3"/>
+<text class="chipt" x="188" y="531" text-anchor="middle">GPU</text>
+<rect class="card pod" x="288" y="476" width="116" height="62" rx="6"/>
+<text class="t" x="298" y="498">GPU worker</text>
+<text class="s" x="298" y="514">vLLM replica</text>
+<rect class="chip" x="298" y="522" width="32" height="12" rx="3"/>
+<text class="chipt" x="314" y="531" text-anchor="middle">GPU</text>
+<rect class="card grp" x="46" y="572" width="368" height="102" rx="8"/>
+<text class="t" x="56" y="590">GPU node pool · taint nvidia.com/gpu</text>
+<rect class="card" x="56" y="606" width="112" height="58" rx="6"/>
+<text class="t" x="66" y="624">GPU Operator</text>
+<text class="s" x="66" y="640">driver · plugin</text>
+<rect class="card" x="178" y="606" width="112" height="58" rx="6"/>
+<text class="t" x="188" y="624">DCGM</text>
+<text class="s" x="188" y="640">exporter :9400</text>
+<rect class="card" x="300" y="606" width="112" height="58" rx="6"/>
+<text class="t" x="310" y="624">Alloy</text>
+<text class="s" x="310" y="640">DaemonSet · logs</text>
+<rect class="card" x="506" y="214" width="328" height="70" rx="6"/>
+<text class="t" x="516" y="232">Prometheus Operator</text>
+<text class="s" x="516" y="248">ServiceMonitor · PodMonitor · rules</text>
+<text class="s" x="516" y="262">vllm:* · DCGM_FI_* · ray_* · kserve_*</text>
+<rect class="card" x="506" y="308" width="328" height="58" rx="6"/>
+<text class="t" x="516" y="326">KEDA</text>
+<text class="s" x="516" y="342">operator · metrics-apiserver</text>
+<text class="s" x="516" y="356">expose external.metrics.k8s.io</text>
+<rect class="card" x="506" y="390" width="328" height="64" rx="6"/>
+<text class="t" x="516" y="408">ScaledObject → HPA</text>
+<text class="s" x="516" y="424">KEDA sinh HPA từ ScaledObject</text>
+<text class="s" x="516" y="438">behavior: stabilization · scale-down policy</text>
+<rect class="card" x="506" y="472" width="328" height="64" rx="6" stroke-dasharray="5 4"/>
+<text class="t" x="516" y="490">KubeRay autoscaler (nhánh B)</text>
+<text class="s" x="516" y="506">Serve cần thêm replica → thêm Ray worker pod</text>
+<rect class="card" x="506" y="566" width="328" height="56" rx="6"/>
+<text class="t" x="516" y="584">Karpenter / Cluster Autoscaler</text>
+<text class="s" x="516" y="600">Pod Pending (thiếu GPU) → thêm GPU node</text>
+<rect class="card" x="926" y="214" width="308" height="56" rx="6"/>
+<text class="t" x="936" y="232">Alertmanager</text>
+<text class="s" x="936" y="248">routing → Slack · PagerDuty</text>
+<rect class="card" x="926" y="292" width="308" height="64" rx="6"/>
+<text class="t" x="936" y="310">Grafana</text>
+<text class="s" x="936" y="326">dashboards · Explore · alerting</text>
+<text class="s" x="936" y="340">datasource: Prometheus · Loki · Tempo</text>
+<rect class="card" x="926" y="380" width="148" height="76" rx="6"/>
+<text class="t" x="936" y="398">Loki</text>
+<text class="s" x="936" y="414">LogQL · ruler</text>
+<text class="s" x="936" y="428">lưu chunk ở S3</text>
+<rect class="card" x="1086" y="380" width="148" height="76" rx="6" stroke-dasharray="5 4"/>
+<text class="t" x="1096" y="398">Tempo (tùy chọn)</text>
+<text class="s" x="1096" y="414">OTLP traces</text>
+<text class="s" x="1096" y="428">← OTel Collector</text>
+<rect class="card ext" x="926" y="476" width="308" height="56" rx="6"/>
+<text class="t" x="936" y="494">Object storage (S3 / GCS)</text>
+<text class="s" x="936" y="510">Loki chunks · Tempo · Thanos / Mimir</text>
+<rect class="card" x="926" y="548" width="308" height="60" rx="6"/>
+<text class="t" x="936" y="566">OpenCost + DCGM</text>
+<text class="s" x="936" y="582">$/GPU-hour · chi phí trên 1M token</text>
+<rect class="card legend" x="926" y="622" width="308" height="52" rx="6"/>
+<line class="ln ln-req" x1="938" y1="633" x2="960" y2="633"/>
+<text class="s" x="966" y="636">Request</text>
+<line class="ln ln-met" x1="1040" y1="633" x2="1062" y2="633"/>
+<text class="s" x="1068" y="636">Metrics</text>
+<line class="ln ln-act" x1="938" y1="651" x2="960" y2="651"/>
+<text class="s" x="966" y="654">Scale action</text>
+<line class="ln ln-log" x1="1040" y1="651" x2="1062" y2="651"/>
+<text class="s" x="1068" y="654">Logs / traces</text>
+<line class="ln ln-ext" x1="1142" y1="650" x2="1164" y2="650" stroke-dasharray="5 4"/>
+<text class="s" x="1170" y="653">Tùy chọn</text>
+<text class="pt" x="30" y="718">NGOÀI CLUSTER</text>
+<rect class="card ext" x="30" y="728" width="400" height="72" rx="6"/>
+<text class="t" x="40" y="746">Container + model registry</text>
+<text class="s" x="40" y="762">ECR · S3 · HF mirror</text>
+<text class="s" x="40" y="776">image + weights → LocalModelCache / NVMe</text>
+<rect class="card ext" x="490" y="728" width="360" height="72" rx="6"/>
+<text class="t" x="500" y="746">Cloud provider API</text>
+<text class="s" x="500" y="762">EC2 / GCE · on-demand · spot · reserved GPU</text>
+<rect class="card ext" x="910" y="728" width="340" height="72" rx="6"/>
+<text class="t" x="920" y="746">Git · CI/CD · Argo CD</text>
+<text class="s" x="920" y="762">Helm · Terraform · GitOps sync vào cluster</text>
+<path class="ln ln-req" d="M125,62 L125,108" marker-end="url(#m-req)"/>
+<path class="ln ln-req" d="M300,158 L300,214" marker-end="url(#m-req)"/>
+<path class="ln ln-req" d="M46,133 L38,133 L38,482 L46,482" stroke-dasharray="6 4" marker-end="url(#m-req)"/>
+<path class="ln ln-met" d="M506,250 L416,250" marker-end="url(#m-met)"/>
+<text class="lb lb-met" x="460" y="242" text-anchor="middle">scrape</text>
+<path class="ln ln-met" d="M670,284 L670,308" marker-end="url(#m-met)"/>
+<text class="lb lb-met" x="678" y="300" text-anchor="start">PromQL</text>
+<path class="ln ln-met" d="M834,236 L926,236" marker-end="url(#m-met)"/>
+<text class="lb lb-met" x="880" y="228" text-anchor="middle">alerts</text>
+<path class="ln ln-met" d="M834,268 L880,268 L880,324 L926,324" marker-end="url(#m-met)"/>
+<path class="ln ln-met" d="M1080,214 L1080,62" stroke-dasharray="6 4" marker-end="url(#m-met)"/>
+<path class="ln ln-act" d="M670,366 L670,390" marker-end="url(#m-act)"/>
+<text class="lb lb-act" x="678" y="382" text-anchor="start">external metric</text>
+<path class="ln ln-act" d="M506,400 L416,400" marker-end="url(#m-act)"/>
+<text class="lb lb-act" x="460" y="392" text-anchor="middle">scale</text>
+<path class="ln ln-act" d="M506,500 L416,500" stroke-dasharray="6 4" marker-end="url(#m-act)"/>
+<text class="lb lb-act" x="460" y="492" text-anchor="middle">scale</text>
+<path class="ln ln-act" d="M506,594 L416,594" stroke-dasharray="6 4" marker-end="url(#m-act)"/>
+<text class="lb lb-act" x="460" y="586" text-anchor="middle">nodes</text>
+<path class="ln ln-act" d="M670,622 L670,728" marker-end="url(#m-act)"/>
+<text class="lb lb-act" x="678" y="706" text-anchor="start">provision</text>
+<path class="ln ln-log" d="M412,640 L880,640 L880,418 L926,418" marker-end="url(#m-log)"/>
+<text class="lb lb-log" x="780" y="632" text-anchor="middle">logs (stdout / stderr)</text>
+<path class="ln ln-log" d="M1000,380 L1000,356" marker-end="url(#m-log)"/>
+<path class="ln ln-log" d="M1160,380 L1160,356" stroke-dasharray="6 4" marker-end="url(#m-log)"/>
+<path class="ln ln-ext" d="M230,728 L230,684" marker-end="url(#m-ext)"/>
+<text class="lb" x="238" y="712" text-anchor="start">pull image · weights</text>
+<path class="ln ln-ext" d="M1080,728 L1080,686" marker-end="url(#m-ext)"/>
+<text class="lb" x="1088" y="712" text-anchor="start">GitOps sync</text>
+</svg>
+    </div>
+    <p class="cap">Nhánh A (KServe) và nhánh B (Ray Serve) là hai lựa chọn thay thế cho nhau; nét đứt là thành phần tùy chọn. Cuộn ngang trên màn hình nhỏ.</p>
+  </section>
+
+  <section aria-labelledby="h-flows">
+    <h2 id="h-flows">Bốn luồng chạy trong hệ thống</h2>
+    <div class="flows">
+      <div class="flow f-req">
+        <h3>Request</h3>
+        <ol>
+          <li>Client gọi API tương thích OpenAI tới Envoy AI Gateway.</li>
+          <li>Gateway xác thực, giới hạn theo token, chọn backend theo model.</li>
+          <li>Request tới Service của InferenceService (A) hoặc Ray Serve (B).</li>
+          <li>vLLM gộp request bằng continuous batching và stream token về.</li>
+        </ol>
+      </div>
+      <div class="flow f-met">
+        <h3>Metrics → quyết định scale</h3>
+        <ol>
+          <li>vLLM và DCGM exporter mở endpoint <code>/metrics</code>.</li>
+          <li>Prometheus scrape qua ServiceMonitor / PodMonitor.</li>
+          <li>KEDA chạy PromQL theo <code>pollingInterval</code>, đưa kết quả vào external metrics API.</li>
+          <li>HPA tính <code>ceil[current × metric / target]</code> và chỉnh số replica.</li>
+        </ol>
+      </div>
+      <div class="flow f-act">
+        <h3>Scale node GPU</h3>
+        <ol>
+          <li>Pod mới ở trạng thái Pending vì hết GPU trống.</li>
+          <li>Karpenter hoặc Cluster Autoscaler gọi cloud API thêm GPU node.</li>
+          <li>GPU Operator khởi tạo driver và device plugin trên node mới.</li>
+          <li>Pod được schedule, tải weights, qua readiness rồi nhận traffic.</li>
+        </ol>
+      </div>
+      <div class="flow f-log">
+        <h3>Logs và traces</h3>
+        <ol>
+          <li>Alloy (DaemonSet) đọc log container trên mỗi node.</li>
+          <li>Gắn label namespace, pod, model rồi đẩy sang Loki.</li>
+          <li>Loki lưu chunk ở object storage.</li>
+          <li>Grafana truy vấn LogQL cạnh PromQL, dùng chung label để đối chiếu.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-comp">
+    <h2 id="h-comp">Thành phần và vai trò</h2>
+    <div class="tablewrap" tabindex="0" role="region" aria-label="Bảng thành phần">
+      <table>
+        <thead><tr><th>Tầng</th><th>Thành phần</th><th>Vai trò</th><th>Lưu ý khi dựng</th></tr></thead>
+        <tbody>
+          <tr><td>Edge</td><td><b>Envoy AI Gateway</b></td><td>Điểm vào duy nhất: xác thực, giới hạn theo token, routing theo model, retry và timeout.</td><td>Đặt timeout dài cho response dạng stream (SSE).</td></tr>
+          <tr><td>Serving</td><td><b>KServe InferenceService</b></td><td>CRD quản lý vòng đời model server: tạo Deployment và Service, tải model từ <code>storageUri</code>, canary.</td><td>Đặt <code>autoscalerClass: keda</code> để KEDA điều khiển số replica.</td></tr>
+          <tr><td>Serving</td><td><b>vLLM</b></td><td>Engine suy luận: continuous batching, PagedAttention, xuất metrics Prometheus.</td><td>Một pod là một replica. Model lớn hơn 1 GPU thì dùng tensor parallel.</td></tr>
+          <tr><td>Serving</td><td><b>KubeRay + Ray Serve</b></td><td>Phương án thay cho KServe khi cần ghép nhiều model, logic Python, chia nhỏ GPU.</td><td>Ray head là điểm yếu, cần bật GCS fault tolerance.</td></tr>
+          <tr><td>GPU</td><td><b>NVIDIA GPU Operator</b></td><td>Cài driver, container toolkit, device plugin, GFD và DCGM exporter lên GPU node.</td><td>Gắn taint <code>nvidia.com/gpu</code> để chỉ pod LLM chạy trên node GPU.</td></tr>
+          <tr><td>GPU</td><td><b>DCGM exporter</b></td><td>Xuất <code>DCGM_FI_DEV_GPU_UTIL</code>, <code>FB_USED</code>, <code>POWER_USAGE</code>, nhiệt độ, gắn nhãn pod và namespace.</td><td>DaemonSet, cổng 9400. Dùng cho dashboard, chi phí và guard rail.</td></tr>
+          <tr><td>Metrics</td><td><b>Prometheus Operator</b></td><td>Lưu time-series, khai báo target bằng ServiceMonitor, chạy recording rule và alert rule.</td><td>Thêm Thanos hoặc Mimir khi cần giữ dữ liệu dài hạn.</td></tr>
+          <tr><td>Metrics</td><td><b>Alertmanager</b></td><td>Gom, khử trùng lặp và định tuyến cảnh báo tới Slack hoặc PagerDuty.</td><td>Cảnh báo theo SLO (TTFT, tỷ lệ lỗi), không chỉ theo GPU.</td></tr>
+          <tr><td>Autoscale</td><td><b>KEDA</b></td><td>Đọc PromQL, expose external metrics API và sinh HPA từ ScaledObject.</td><td>Kiến trúc trong sách gọi là custom metrics API; KEDA thực tế đăng ký <code>external.metrics.k8s.io</code>.</td></tr>
+          <tr><td>Autoscale</td><td><b>HPA</b></td><td>Tính số replica mong muốn và chỉnh Deployment, theo <code>behavior</code> đã cấu hình.</td><td>Chỉnh stabilization window và scale-down policy, đừng dùng mặc định.</td></tr>
+          <tr><td>Autoscale</td><td><b>KubeRay autoscaler</b></td><td>Khi Ray Serve cần thêm replica mà thiếu tài nguyên, tạo thêm Ray worker pod.</td><td>Chỉ dùng ở nhánh B. Ray Serve tự scale replica, không cần KEDA.</td></tr>
+          <tr><td>Autoscale</td><td><b>Karpenter / Cluster Autoscaler</b></td><td>Thêm hoặc bớt GPU node khi có pod Pending hoặc node dư.</td><td>Tách node pool on-demand (nền) và spot (đỉnh tải). Kiểm tra quota GPU.</td></tr>
+          <tr><td>Logs</td><td><b>Grafana Alloy</b></td><td>Collector DaemonSet đọc log container và gửi tới Loki.</td><td>Thay Promtail, vốn đã hết hỗ trợ từ 02/03/2026.</td></tr>
+          <tr><td>Logs</td><td><b>Loki</b></td><td>Lưu và truy vấn log bằng LogQL, chỉ index label, chunk nằm ở S3.</td><td>Giữ ít label (namespace, pod, model), tránh label cardinality cao.</td></tr>
+          <tr><td>Traces</td><td><b>OTel Collector + Tempo</b></td><td>Theo dõi một request đi qua gateway và vLLM, nối với log qua trace id.</td><td>Tùy chọn, thêm sau khi metrics và logs đã ổn.</td></tr>
+          <tr><td>Viz</td><td><b>Grafana</b></td><td>Dashboard và alert, đọc từ Prometheus, Loki, Tempo.</td><td>Provision dashboard bằng code trong Git.</td></tr>
+          <tr><td>Cost</td><td><b>OpenCost</b></td><td>Quy đổi GPU-hour thành chi phí theo namespace và model.</td><td>Kết hợp token throughput để ra chi phí trên 1M token.</td></tr>
+          <tr><td>Platform</td><td><b>Git, CI/CD, Argo CD</b></td><td>Mọi manifest nằm trong Git; Argo CD đồng bộ vào cluster; CI build image và đẩy model.</td><td>Terraform cho cluster và node pool.</td></tr>
+          <tr><td>Platform</td><td><b>Registry + model store</b></td><td>Lưu image và weights; KServe LocalModelCache giữ bản sao trên NVMe của node.</td><td>Đây là chìa khóa để giảm cold start.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-choice">
+    <h2 id="h-choice">KServe hay Ray Serve</h2>
+    <div class="tablewrap" tabindex="0" role="region" aria-label="So sánh KServe và Ray Serve">
+      <table>
+        <thead><tr><th>Tiêu chí</th><th>A · KServe + vLLM</th><th>B · KubeRay + Ray Serve</th></tr></thead>
+        <tbody>
+          <tr><td>Cách điều khiển</td><td>CRD của Kubernetes, GitOps thuần.</td><td>Ray Serve application, khai báo qua CRD RayService.</td></tr>
+          <tr><td>Autoscale replica</td><td>KEDA + HPA, đọc metric từ Prometheus. Giống kiến trúc trong sách.</td><td>Serve controller tự scale theo <code>target_ongoing_requests</code>.</td></tr>
+          <tr><td>Scale node</td><td>Karpenter / Cluster Autoscaler.</td><td>KubeRay autoscaler yêu cầu pod, rồi Karpenter / CA cấp node.</td></tr>
+          <tr><td>Nhiều model, pipeline</td><td>Mỗi model một InferenceService; ghép bằng transformer hoặc gateway.</td><td>Ghép RAG, rerank, LLM trong một app Python, chia nhỏ GPU.</td></tr>
+          <tr><td>Độ phức tạp vận hành</td><td>Thấp hơn: ít thành phần chạy nền.</td><td>Cao hơn: có Ray head, GCS, runtime riêng.</td></tr>
+          <tr><td>Nên chọn khi</td><td>Một hoặc vài model LLM, đội platform quen Kubernetes.</td><td>Có pipeline nhiều bước hoặc logic suy luận tùy biến bằng Python.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Gợi ý khởi đầu: dựng nhánh A trước vì bám sát sách và có ít phần phải tự viết, sau đó thêm nhánh B khi nhu cầu ghép pipeline xuất hiện. Cả hai dùng chung Prometheus, Loki, Grafana và node pool GPU.</p>
+  </section>
+
+  <section aria-labelledby="h-signals">
+    <h2 id="h-signals">Tín hiệu để autoscale</h2>
+    <div class="tablewrap" tabindex="0" role="region" aria-label="Bảng tín hiệu autoscale">
+      <table>
+        <thead><tr><th>Tín hiệu</th><th>PromQL mẫu</th><th>Dùng như thế nào</th></tr></thead>
+        <tbody>
+          <tr><td>Hàng đợi và request đang chạy</td><td><code>sum(vllm:num_requests_running) + sum(vllm:num_requests_waiting)</code></td><td><b>Trigger chính.</b> Phản ánh tải thật và tăng trước khi độ trễ xấu đi. Threshold là số request mỗi replica chịu được, đo bằng load test.</td></tr>
+          <tr><td>KV cache</td><td><code>avg(vllm:kv_cache_usage_perc)</code></td><td>Guard rail. Gần 1.0 nghĩa là sắp thiếu bộ nhớ cho request mới. Bản vLLM cũ dùng tên <code>gpu_cache_usage_perc</code>.</td></tr>
+          <tr><td>TTFT p95</td><td><code>histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[2m])))</code></td><td>SLO và cảnh báo. Có thể làm trigger phụ khi đã hiểu rõ hành vi tải.</td></tr>
+          <tr><td>GPU utilization (DCGM)</td><td><code>avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL[5m]))</code></td><td>Cách sách đề xuất. Giữ cho dashboard và chi phí. Làm trigger duy nhất thì dễ sai, vì với continuous batching chỉ số này thường lên rất cao dù còn dư công suất; hãy xác nhận bằng load test.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Metric tên <code>vllm:*</code> có thể đổi theo phiên bản vLLM. Hãy kiểm tra <code>/metrics</code> của đúng bản bạn chạy trước khi viết query.</p>
+  </section>
+
+  <section aria-labelledby="h-conf">
+    <h2 id="h-conf">Cấu hình mẫu</h2>
+    <div class="codes">
+      <div class="codeblock">
+        <span class="tag">Nhánh A · InferenceService dùng KEDA</span>
+<pre tabindex="0"><code>apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama3-8b
+  namespace: llm-serving
+  annotations:
+    # tên mode khác nhau giữa các bản KServe
+    serving.kserve.io/deploymentMode: RawDeployment
+    serving.kserve.io/autoscalerClass: keda
+spec:
+  predictor:
+    minReplicas: 2
+    maxReplicas: 8
+    model:
+      modelFormat: { name: huggingface }
+      storageUri: s3://models/llama3-8b-instruct
+      resources:
+        limits: { nvidia.com/gpu: "1", cpu: "8", memory: 48Gi }
+    autoScaling:
+      metrics:
+        - type: External
+          external:
+            metric:
+              backend: prometheus
+              serverAddress: http://prometheus-operated.monitoring:9090
+              query: &gt;-
+                sum(vllm:num_requests_running{namespace="llm-serving"})
+                + sum(vllm:num_requests_waiting{namespace="llm-serving"})
+            target: { type: Value, value: "8" }</code></pre>
+      </div>
+      <div class="codeblock">
+        <span class="tag">Nếu tự quản lý Deployment · ScaledObject với 5 tham số của sách</span>
+<pre tabindex="0"><code>apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-llama3
+  namespace: llm-serving
+spec:
+  scaleTargetRef: { name: vllm-llama3 }
+  minReplicaCount: 2        # cao hơn tải nền một chút
+  maxReplicaCount: 8        # vừa trên đỉnh tải, trong quota GPU
+  pollingInterval: 15
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies: [{ type: Pods, value: 2, periodSeconds: 60 }]
+        scaleDown:
+          # dài hơn thời gian khởi động một replica
+          stabilizationWindowSeconds: 900
+          policies: [{ type: Pods, value: 1, periodSeconds: 120 }]
+  triggers:
+    - type: prometheus
+      metricType: AverageValue   # threshold tính trên mỗi replica
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring:9090
+        query: &gt;-
+          sum(vllm:num_requests_running{namespace="llm-serving"})
+          + sum(vllm:num_requests_waiting{namespace="llm-serving"})
+        threshold: "8"</code></pre>
+      </div>
+    </div>
+    <p class="note">Hai mẫu minh họa cấu trúc. Tên field của KServe thay đổi theo phiên bản, hãy đối chiếu với tài liệu của bản bạn cài. Khi dùng <code>autoscalerClass: keda</code>, KServe tự sinh ScaledObject nên không cần viết thêm khối bên phải cho cùng workload.</p>
+  </section>
+
+  <section aria-labelledby="h-risk">
+    <h2 id="h-risk">Những điểm dễ sai khi chạy thật</h2>
+    <ul class="risks">
+      <li><b>Cold start dài</b>Pull image vài GB, tải weights hàng chục GB, khởi tạo CUDA. Giảm bằng pre-pull image, LocalModelCache trên NVMe, pod placeholder ưu tiên thấp để giữ chỗ GPU, và startupProbe đủ dài.</li>
+      <li><b>Scale down làm rớt request</b>Đặt <code>terminationGracePeriodSeconds</code> lớn hơn request dài nhất, thêm preStop để drain, và PodDisruptionBudget cho phép Karpenter dọn node an toàn.</li>
+      <li><b>Flapping</b>Dùng giá trị trung bình theo thời gian, stabilization window scale-down dài hơn thời gian khởi động, và policy xóa từng pod một.</li>
+      <li><b>CPU và RAM làm nghẽn trước GPU</b>Lớp API, tokenizer và xử lý thread cần đủ CPU và RAM. Nếu thiếu, GPU không bao giờ đạt ngưỡng và hệ thống không scale.</li>
+      <li><b>Scale-to-zero</b>KEDA không scale từ 0 theo resource metric. Với LLM mất hàng phút để lên, production nên giữ <code>minReplicas ≥ 1</code>; scale về 0 hợp với môi trường dev hoặc job theo hàng đợi.</li>
+      <li><b>Quota và chi phí</b>Đặt <code>maxReplicas</code> trong quota GPU của tài khoản cloud, và cảnh báo khi số replica chạm trần để phân biệt đỉnh tải thật với tấn công.</li>
+    </ul>
+  </section>
+</div>
+
+</body></html>

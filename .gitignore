@@ -1,0 +1,8 @@
+.idea/
+.jbeval/
+.terraform/
+*.tfstate
+*.tfstate.*
+.env
+.venv/
+__pycache__/
