@@ -1,0 +1,7 @@
+openai==3.35.1
+
+# loadtest/compare/compare.py chế độ "hf" (cần GPU NVIDIA + CUDA). Pin theo bản trong image vllm/vllm-openai:v0.31.0
+# đã dùng để benchmark. Trên Windows/máy không GPU, pip cài torch bản CPU nên chế độ "hf" không chạy được.
+torch==2.13.0
+transformers==5.17.0
+accelerate==1.15.0

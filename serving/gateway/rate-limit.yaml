@@ -1,0 +1,30 @@
+# Rate limit theo token cho từng API key (x-client-id do apiKeyAuth gắn vào).
+# Token chỉ bị trừ khi response kết thúc, nên request làm vượt hạn mức vẫn chạy hết; các request sau mới bị 429.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: llm-token-limit
+spec:
+  targetRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: llm-gateway }
+  rateLimit:
+    type: Global
+    global:
+      rules:
+        - clientSelectors:
+            - headers: [{ name: x-client-id, type: Distinct }]
+          limit: { requests: 100000, unit: Minute }
+          cost:
+            request: { from: Number, number: 0 } # chỉ kiểm tra hạn mức, không trừ khi request vào
+            response:
+              from: Metadata
+              metadata: { namespace: io.envoy.ai_gateway, key: llm_total_token }
+        # Key ratelimit-test có hạn mức thấp để ratelimit.sh thấy 429 mà không tốn GPU
+        - clientSelectors:
+            - headers: [{ name: x-client-id, type: Exact, value: ratelimit-test }]
+          limit: { requests: 500, unit: Minute }
+          cost:
+            request: { from: Number, number: 0 }
+            response:
+              from: Metadata
+              metadata: { namespace: io.envoy.ai_gateway, key: llm_total_token }

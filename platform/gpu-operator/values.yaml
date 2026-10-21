@@ -1,0 +1,13 @@
+# NVIDIA GPU Operator v26.7.2
+# helm upgrade --install gpu-operator nvidia/gpu-operator --version v26.7.2 \
+#   -n gpu-operator --create-namespace -f platform/gpu-operator/values.yaml
+# Driver và container toolkit đã cài trên host (infra/node/prepare-gpu-node.sh), k3s đã nhận runtime nvidia.
+driver:
+  enabled: false
+toolkit:
+  enabled: false
+# shortcut: tắt CDI vì host toolkit không sinh CDI spec cho operator; bật lại nếu chuyển sang để operator quản lý toolkit
+cdi:
+  enabled: false
+dcgmExporter:
+  enabled: true

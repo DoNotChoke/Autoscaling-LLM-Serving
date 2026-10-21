@@ -1,0 +1,6 @@
+# Copy vào /etc/rancher/k3s/config.yaml trước khi cài k3s (install-k3s.sh tự làm việc này)
+write-kubeconfig-mode: "0644"
+disable:
+  - traefik # dùng Envoy Gateway
+# k3s tự phát hiện nvidia-container-runtime; đặt làm mặc định để pod GPU không cần runtimeClassName
+default-runtime: nvidia

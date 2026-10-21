@@ -1,0 +1,41 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  KUBECONFORM_VERSION: v0.8.0
+  # Schema cho CRD (KServe, ...); thiếu schema thì bỏ qua thay vì fail
+  CRD_SCHEMAS: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+
+jobs:
+  manifests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cài kubeconform
+        run: |
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+      - name: Kustomize build + kubeconform
+        run: |
+          set -euo pipefail
+          for dir in serving/models serving/kserve serving/gateway serving/open-webui platform/redis platform/cloudflared; do
+            echo "::group::$dir"
+            kubectl kustomize "$dir" | kubeconform -strict -summary \
+              -schema-location default -schema-location "$CRD_SCHEMAS" -ignore-missing-schemas
+            echo "::endgroup::"
+          done
+          kubeconform -strict -summary -schema-location default -schema-location "$CRD_SCHEMAS" \
+            -ignore-missing-schemas serving/dev/ infra/node/gpu-test-pod.yaml serving/open-webui/tunnel.yaml
+
+  scripts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: git ls-files '*.sh' | xargs shellcheck

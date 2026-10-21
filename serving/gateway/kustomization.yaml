@@ -1,0 +1,11 @@
+# Cần cài Envoy Gateway + AI Gateway trước (docs/runbooks/gateway.md)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: llm-serving
+resources:
+  - gateway.yaml
+  - route.yaml
+  - backend-security-policy.yaml
+  - security-policy.yaml
+  - rate-limit.yaml
+  - client-traffic-policy.yaml

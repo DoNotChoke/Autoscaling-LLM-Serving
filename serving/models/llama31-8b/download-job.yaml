@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: download-llama31-8b
+  labels:
+    model: llama31-8b
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        model: llama31-8b
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: download
+          # Cùng image với vLLM ở T5: có sẵn CLI hf, và kéo image trước cho lần serve đầu
+          image: vllm/vllm-openai:v0.31.0
+          command: ["bash", "/scripts/download-model.sh"]
+          env:
+            - { name: HF_REPO, value: meta-llama/Llama-3.1-8B-Instruct }
+            - { name: HF_REVISION, value: 0e9e39f249a16976918f6564b8830bc894c89659 }
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef: { name: hf-token, key: token, optional: true }
+          resources:
+            requests: { cpu: "1", memory: 2Gi }
+            limits: { memory: 8Gi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: scripts, mountPath: /scripts }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: model-llama31-8b }
+        - name: scripts
+          configMap: { name: model-download-script }

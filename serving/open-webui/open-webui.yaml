@@ -1,0 +1,73 @@
+# Open WebUI: giao diện chat web cho nhóm. Gọi gateway bằng MỘT key chung (client-id "open-webui"),
+# nên hạn mức 100k token/phút tính chung cho mọi người dùng Open WebUI.
+# Secret open-webui (tạo ngoài Git): WEBUI_SECRET_KEY (ký session), OPENAI_API_KEY (key gateway của open-webui).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: open-webui
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: open-webui
+spec:
+  storageClassName: local-path
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 10Gi } # DB tài khoản, lịch sử chat, file upload, model embedding
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: open-webui
+  labels: { app: open-webui }
+spec:
+  replicas: 1
+  strategy: { type: Recreate } # PVC RWO + SQLite: không chạy 2 pod cùng lúc
+  selector:
+    matchLabels: { app: open-webui }
+  template:
+    metadata:
+      labels: { app: open-webui }
+    spec:
+      containers:
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:v0.12.3
+          env:
+            - { name: OPENAI_API_BASE_URL, value: "http://llm-gateway-envoy.envoy-gateway-system.svc.cluster.local/v1" }
+            - name: OPENAI_API_KEY
+              valueFrom: { secretKeyRef: { name: open-webui, key: OPENAI_API_KEY } }
+            - name: WEBUI_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: open-webui, key: WEBUI_SECRET_KEY } }
+            - { name: ENABLE_OLLAMA_API, value: "false" }
+            # Phòng khi admin bật lại đăng ký: người tự đăng ký phải chờ duyệt (mặc định v0.12 tắt đăng ký sau khi có admin)
+            - { name: DEFAULT_USER_ROLE, value: pending }
+          ports:
+            - { name: http, containerPort: 8080 }
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            failureThreshold: 60 # lần đầu tải model embedding, có thể mất vài phút
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { memory: 4Gi }
+          volumeMounts:
+            - { name: data, mountPath: /app/backend/data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: open-webui-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: open-webui
+spec:
+  selector: { app: open-webui }
+  ports:
+    - { name: http, port: 80, targetPort: http }

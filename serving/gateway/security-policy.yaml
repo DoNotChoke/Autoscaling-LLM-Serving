@@ -1,0 +1,15 @@
+# API key cho từng client: Secret gateway-api-keys (client-id → key), quản lý bằng api-key.sh
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: llm-client-apikey
+spec:
+  targetRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: llm-gateway }
+  apiKeyAuth:
+    credentialRefs:
+      - { group: "", kind: Secret, name: gateway-api-keys }
+    extractFrom:
+      - headers: [Authorization] # OpenAI SDK gửi "Authorization: Bearer <key>"
+    forwardClientIDHeader: x-client-id # rate limit đếm theo header này
+    sanitize: true # không chuyển key của client vào vLLM

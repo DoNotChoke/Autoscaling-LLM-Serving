@@ -1,0 +1,16 @@
+# Runtime dùng image vLLM chính thức thay cho kserve-huggingfaceserver: giữ nguyên API OpenAI và metrics vllm:*
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-openai
+spec:
+  supportedModelFormats:
+    - { name: vllm, autoSelect: true }
+  containers:
+    - name: kserve-container
+      image: vllm/vllm-openai:v0.31.0
+      # KServe mount weights ở /mnt/models; tham số engine theo từng model nằm trong InferenceService
+      command: ["vllm", "serve", "/mnt/models"]
+      args: ["--port=8000"]
+      ports:
+        - { name: http, containerPort: 8000, protocol: TCP }
