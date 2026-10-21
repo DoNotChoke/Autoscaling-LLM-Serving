@@ -1,0 +1,7 @@
+# Cần apply serving/models trước (namespace, PVC có model) và Secret vllm-api-key
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: llm-serving
+resources:
+  - runtimes/vllm.yaml
+  - models/llama31-8b/inferenceservice.yaml

@@ -1,0 +1,57 @@
+# T5: vLLM dạng Deployment thường để kiểm tra GPU + PVC + model trước khi dùng KServe. Xoá sau T6.
+# kubectl apply -f serving/dev/vllm-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-dev
+  namespace: llm-serving
+  labels: { app: vllm-dev, model: llama31-8b }
+spec:
+  replicas: 1
+  strategy: { type: Recreate } # chỉ có 1 GPU, không chạy được 2 pod cùng lúc khi rollout
+  selector:
+    matchLabels: { app: vllm-dev }
+  template:
+    metadata:
+      labels: { app: vllm-dev, model: llama31-8b, app.kubernetes.io/part-of: llm-serving }
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.31.0
+          command: ["vllm", "serve", "/mnt/models/current"]
+          args:
+            - --served-model-name=llama31-8b
+            - --max-model-len=16384
+            - --gpu-memory-utilization=0.90
+            - --port=8000
+          env:
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef: { name: vllm-api-key, key: key }
+          ports:
+            - { name: http, containerPort: 8000 }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { nvidia.com/gpu: "1", cpu: "4", memory: 4Gi } # RAM thật ~2,8 GiB; weights nằm trên GPU
+            limits: { nvidia.com/gpu: "1", memory: 12Gi } # page cache khi load model bị chặn ở đây, kernel tự thu hồi (đã thử: 0 OOM)
+          volumeMounts:
+            - { name: models, mountPath: /mnt/models, readOnly: true }
+            - { name: shm, mountPath: /dev/shm }
+      volumes:
+        - name: models
+          persistentVolumeClaim: { claimName: model-llama31-8b, readOnly: true }
+        - name: shm
+          emptyDir: { medium: Memory, sizeLimit: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-dev
+  namespace: llm-serving
+  labels: { app: vllm-dev, model: llama31-8b }
+spec:
+  selector: { app: vllm-dev }
+  ports:
+    - { name: http, port: 8000, targetPort: http }
