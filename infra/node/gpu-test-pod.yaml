@@ -1,0 +1,14 @@
+# kubectl apply -f infra/node/gpu-test-pod.yaml && kubectl logs -f gpu-test && kubectl delete pod gpu-test
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-test
+spec:
+  restartPolicy: Never
+  containers:
+    - name: cuda
+      image: nvidia/cuda:12.9.1-base-ubuntu22.04
+      command: ["nvidia-smi"]
+      resources:
+        limits:
+          nvidia.com/gpu: 1
