@@ -1,0 +1,5 @@
+# Thứ tự: apply open-webui.yaml → tạo admin → mới apply tunnel.yaml (docs/runbooks/open-webui.md)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - open-webui.yaml
