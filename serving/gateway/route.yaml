@@ -1,0 +1,42 @@
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: llm-route
+spec:
+  parentRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: llm-gateway }
+  rules:
+    # AI Gateway tự lấy trường "model" trong body đưa vào header x-ai-eg-model
+    - matches:
+        - headers: [{ type: Exact, name: x-ai-eg-model, value: llama31-8b }]
+      backendRefs:
+        - name: llama31-8b
+      # Mặc định 60s; request không stream sinh dài cần lâu hơn
+      timeouts:
+        request: 300s
+  # Số token đọc từ "usage" của response, rate-limit.yaml dùng để trừ hạn mức
+  llmRequestCosts:
+    - { metadataKey: llm_input_token, type: InputToken }
+    - { metadataKey: llm_output_token, type: OutputToken }
+    - { metadataKey: llm_total_token, type: TotalToken }
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: llama31-8b
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    { group: gateway.envoyproxy.io, kind: Backend, name: llama31-8b }
+---
+# AIServiceBackend chưa trỏ thẳng được tới Service (ai-gateway#902), nên đi qua Backend FQDN
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: llama31-8b
+spec:
+  endpoints:
+    - fqdn:
+        hostname: llama31-8b-predictor.llm-serving.svc.cluster.local
+        port: 80

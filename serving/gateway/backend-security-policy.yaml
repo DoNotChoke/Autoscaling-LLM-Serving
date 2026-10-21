@@ -1,0 +1,11 @@
+# Gateway đính key nội bộ khi gọi vLLM (vLLM vẫn bật VLLM_API_KEY). Đọc khoá "apiKey" của Secret vllm-api-key.
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: BackendSecurityPolicy
+metadata:
+  name: llama31-8b-apikey
+spec:
+  targetRefs:
+    - { group: aigateway.envoyproxy.io, kind: AIServiceBackend, name: llama31-8b }
+  type: APIKey
+  apiKey:
+    secretRef: { name: vllm-api-key }

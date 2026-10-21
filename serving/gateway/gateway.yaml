@@ -1,0 +1,56 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: llm-gateway
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: llm-gateway
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      # ClusterIP: ServiceLB của k3s không mở cổng trên node; ra ngoài chỉ qua tunnel
+      envoyService:
+        type: ClusterIP
+        name: llm-gateway-envoy # tên cố định cho cloudflared và port-forward (mặc định có hậu tố hash)
+  # Access log JSON ra stdout: ai, model nào, kết quả, bao nhiêu token. Không ghi body hay key.
+  telemetry:
+    accessLog:
+      settings:
+        - format:
+            type: JSON
+            json:
+              time: "%START_TIME%"
+              client: "%REQ(X-CLIENT-ID)%"
+              model: "%REQ(X-AI-EG-MODEL)%"
+              path: "%REQ(:PATH)%"
+              status: "%RESPONSE_CODE%"
+              flags: "%RESPONSE_FLAGS%"
+              details: "%RESPONSE_CODE_DETAILS%"
+              duration_ms: "%DURATION%"
+              input_tokens: "%DYNAMIC_METADATA(io.envoy.ai_gateway:llm_input_token)%"
+              output_tokens: "%DYNAMIC_METADATA(io.envoy.ai_gateway:llm_output_token)%"
+              total_tokens: "%DYNAMIC_METADATA(io.envoy.ai_gateway:llm_total_token)%"
+          sinks:
+            - type: File
+              file: { path: /dev/stdout }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: llm-gateway
+spec:
+  gatewayClassName: llm-gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: llm-gateway

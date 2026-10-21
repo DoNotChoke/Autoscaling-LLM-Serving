@@ -1,0 +1,35 @@
+# Envoy Gateway v1.8.1 cho Envoy AI Gateway v1.1.0 (theo manifests/envoy-gateway-values.yaml của AI Gateway)
+# helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm --version v1.8.1 \
+#   -n envoy-gateway-system --create-namespace -f platform/envoy-gateway/values.yaml --wait
+config:
+  envoyGateway:
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    logging:
+      level:
+        default: info
+    provider:
+      type: Kubernetes
+    # Global rate limit (theo token) đếm trên Redis: platform/redis
+    rateLimit:
+      backend:
+        type: Redis
+        redis:
+          url: redis.redis-system.svc.cluster.local:6379
+    extensionApis:
+      enableEnvoyPatchPolicy: true
+      enableBackend: true # AIServiceBackend trỏ tới Backend
+    # AI Gateway chỉnh xDS do Envoy Gateway sinh ra
+    extensionManager:
+      hooks:
+        xdsTranslator:
+          translation:
+            listener: { includeAll: true }
+            route: { includeAll: true }
+            cluster: { includeAll: true }
+            secret: { includeAll: true }
+          post: [Translation, Cluster, Route]
+      service:
+        fqdn:
+          hostname: ai-gateway-controller.envoy-ai-gateway-system.svc.cluster.local
+          port: 1063
