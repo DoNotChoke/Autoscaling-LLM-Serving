@@ -33,4 +33,4 @@ for c in "${LEVELS[@]}"; do
     --save-result --result-dir "$OUT" --result-filename "c$c.json" > "$OUT/log_c$c.txt" 2>&1 || true
   kill "$sampler"
 done
-echo done > "$OUT/DONE"
+echo "done" > "$OUT/DONE"
