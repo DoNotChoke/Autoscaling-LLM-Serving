@@ -24,7 +24,7 @@ jobs:
       - name: Kustomize build + kubeconform
         run: |
           set -euo pipefail
-          for dir in serving/models serving/kserve serving/gateway serving/open-webui platform/redis platform/cloudflared; do
+          for dir in serving/models serving/kserve serving/gateway serving/open-webui platform/redis platform/cloudflared autoscaling/scaledobjects autoscaling/pdb; do
             echo "::group::$dir"
             kubectl kustomize "$dir" | kubeconform -strict -summary \
               -schema-location default -schema-location "$CRD_SCHEMAS" -ignore-missing-schemas

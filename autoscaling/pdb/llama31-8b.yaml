@@ -1,0 +1,14 @@
+# Drain node hoặc evict chủ động không được lấy đi replica cuối cùng.
+# Lưu ý: khi chỉ còn 1 replica, PDB này chặn drain node đó; scale lên 2 (hoặc xoá PDB) trước khi bảo trì.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llama31-8b
+  labels:
+    model: llama31-8b
+    app.kubernetes.io/part-of: llm-serving
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      serving.kserve.io/inferenceservice: llama31-8b

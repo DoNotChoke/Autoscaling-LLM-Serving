@@ -1,0 +1,53 @@
+# KEDA tự quản lý HPA cho predictor. InferenceService phải có autoscalerClass: external
+# (KServe xoá HPA của nó và không đụng tới replicas); apply InferenceService trước, ScaledObject sau.
+# Lý do chọn metric và tham số: docs/adr/0002-autoscaling.md
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: llama31-8b
+  labels:
+    model: llama31-8b
+    app.kubernetes.io/part-of: llm-serving
+spec:
+  scaleTargetRef:
+    name: llama31-8b-predictor
+  # Chế độ quan sát (A3): min = max nên HPA tính nhưng không đổi được gì.
+  # Hiện cụm có 1 GPU nên để 1/1; có node thứ 2 thì 2/2, nghiệm thu A3 xong mới đổi sang 1/2 (A4).
+  minReplicaCount: 1
+  maxReplicaCount: 1
+  pollingInterval: 15
+  # Mất Prometheus thì giữ đủ sức chứa thay vì đứng yên ở số replica cũ
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
+        # Lớn hơn nhiều lần cold start (~2 phút): xoá pod rồi tạo lại tốn hơn giữ thêm 10 phút
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
+  triggers:
+    # Tổng tải (running + waiting), HPA chia cho số replica. Không dùng riêng waiting: đủ replica thì
+    # waiting về 0, HPA scale xuống rồi lại lên (flapping)
+    - type: prometheus
+      name: concurrency
+      metricType: AverageValue
+      metadata:
+        # Địa chỉ Prometheus của Người 3, xác nhận lại khi O1 xong
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        # "or vector(0)": chưa có pod nào được scrape thì trả 0 thay vì lỗi
+        query: (sum(vllm:num_requests_running{namespace="llm-serving"}) + sum(vllm:num_requests_waiting{namespace="llm-serving"})) or vector(0)
+        # Tạm: SLO TTFT p95 2s → C_max = 4 (loadtest/results/2026-10-24-baseline-1-replica.md), × 0,75. Chờ chốt SLO
+        threshold: "3"
+    # Phụ: ít request nhưng prompt dài làm đầy KV cache trước khi concurrency vượt ngưỡng
+    - type: prometheus
+      name: kvcache
+      metricType: Value
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        query: avg(vllm:kv_cache_usage_perc{namespace="llm-serving"}) or vector(0)
+        threshold: "0.8"
