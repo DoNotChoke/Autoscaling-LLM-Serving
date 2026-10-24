@@ -12,9 +12,9 @@ spec:
   scaleTargetRef:
     name: llama31-8b-predictor
   # Chế độ quan sát (A3): min = max nên HPA tính nhưng không đổi được gì.
-  # Hiện cụm có 1 GPU nên để 1/1; có node thứ 2 thì 2/2, nghiệm thu A3 xong mới đổi sang 1/2 (A4).
-  minReplicaCount: 1
-  maxReplicaCount: 1
+  # Nghiệm thu A3 xong mới đổi sang 1/2 (A4).
+  minReplicaCount: 2
+  maxReplicaCount: 2
   pollingInterval: 15
   # Mất Prometheus thì giữ đủ sức chứa thay vì đứng yên ở số replica cũ
   fallback:
