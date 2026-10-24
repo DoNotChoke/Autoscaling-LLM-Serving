@@ -5,7 +5,7 @@
 
 ## Bối cảnh
 
-- Lab có **2 máy, mỗi máy 1 RTX 3060 12 GB**. Hiện cụm k3s mới có 1 node; node thứ 2 chưa join.
+- Lab có **2 máy, mỗi máy 1 RTX 3060 12 GB**, cùng LAN, đã ghép thành cụm k3s 2 node (2026-10-24, `docs/runbooks/cluster-setup.md`).
 - Model là Llama-3.1-8B-Instruct **AWQ INT4** (BF16 15 GB không vừa 12 GB). Cold start ~2 phút (ADR-0001, đo trên 4090; cần đo lại trên 3060).
 - InferenceService `llama31-8b` chạy KServe v0.21 Standard mode. Mặc định KServe tự tạo một HPA theo CPU cho predictor.
 - Yêu cầu: tự scale giữa 1 và 2 replica theo tải thật, giữ TTFT p95 dưới SLO, không flapping, không rớt request khi scale xuống.
