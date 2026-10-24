@@ -7,12 +7,19 @@ metadata:
     app.kubernetes.io/part-of: llm-serving
   annotations:
     serving.kserve.io/deploymentMode: Standard
+    # Số replica do ScaledObject trong autoscaling/scaledobjects/ quyết định. "external": KServe xoá HPA
+    # của nó và bỏ qua replicas; "none" vẫn ép replicas = minReplicas nên giành với HPA (ADR 0002)
+    serving.kserve.io/autoscalerClass: external
 spec:
   predictor:
-    # Chưa autoscale: min = max = 1. Phần autoscaling sẽ đổi sang autoscalerClass: keda
+    # Chỉ là số khởi tạo khi tạo Deployment; giới hạn thật nằm ở ScaledObject
     minReplicas: 1
-    maxReplicas: 1
-    deploymentStrategy: { type: Recreate } # chỉ có 1 GPU, không rollout song song được
+    maxReplicas: 2
+    # Mỗi node 1 GPU, không có GPU thừa để tạo pod mới trước: tắt 1 pod rồi mới tạo pod thay thế,
+    # pod còn lại vẫn phục vụ (Recreate tắt cả 2 cùng lúc)
+    deploymentStrategy:
+      type: RollingUpdate
+      rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
     # Lớn hơn preStop (15s) + request dài nhất (~60s với max_tokens 2048)
     terminationGracePeriodSeconds: 120
     labels:
