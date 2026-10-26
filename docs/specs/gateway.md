@@ -1,6 +1,6 @@
 # Spec: Gateway (module `gateway`)
 
-> Module `gateway` trong capability map của [`SPEC.md`](SPEC.md). Phụ thuộc: `serving-core` (InferenceService `llama31-8b` đã chạy).
+> Module `gateway` trong capability map của [`serving.md`](serving.md). Phụ thuộc: `serving-core` (InferenceService `llama31-8b` đã chạy).
 > Trạng thái: **Đã triển khai** (T9–T15, 2026-10-21) trên lab 1 máy.
 
 ---
@@ -162,7 +162,7 @@ docs/user-guide.md                     # Hướng dẫn cho người dùng: URL,
 
 ## Code style
 
-Theo `SPEC.md`: YAML thuần, gom bằng Kustomize, comment chỉ ghi lý do, không commit secret (mỗi Secret có file `.example`). Script shell bắt đầu bằng `set -euo pipefail`, chạy lại nhiều lần không lỗi, và phải qua `shellcheck`. Ví dụ cho rule rate limit:
+Theo [`serving.md`](serving.md): YAML thuần, gom bằng Kustomize, comment chỉ ghi lý do, không commit secret (mỗi Secret có file `.example`). Script shell bắt đầu bằng `set -euo pipefail`, chạy lại nhiều lần không lỗi, và phải qua `shellcheck`. Ví dụ cho rule rate limit:
 
 ```yaml
 apiVersion: gateway.envoyproxy.io/v1alpha1
