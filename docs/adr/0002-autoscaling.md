@@ -1,6 +1,6 @@
 # ADR-0002: Autoscale vLLM 1 ↔ 2 replica bằng KEDA theo metric vLLM
 
-- Trạng thái: **Nháp**. Chờ chốt SLO, node GPU thứ 2 và kết quả S1–S6
+- Trạng thái: **Nháp**. SLO đang để tạm 1 s, chờ kết quả S1–S6 để chốt
 - Ngày: 2026-10-24
 
 ## Bối cảnh
@@ -28,12 +28,12 @@ ScaledObject ở `autoscaling/scaledobjects/llama31-8b.yaml`, trỏ vào Deploym
 
 | Trigger | PromQL | Kiểu | Target |
 |---|---|---|---|
-| `concurrency` (chính) | `sum(vllm:num_requests_running) + sum(vllm:num_requests_waiting)` (namespace `llm-serving`) | `AverageValue` | **3** (tạm, xem mục 3) |
+| `concurrency` (chính) | `llm_serving:vllm_concurrency:sum` (recording rule = running + waiting) | `AverageValue` | **2** (tạm, xem mục 3) |
 | `kvcache` (phụ) | `avg(vllm:kv_cache_usage_perc)` | `Value` | 0,8 |
 
 - **Không dùng `DCGM_FI_DEV_GPU_UTIL`**: lên ~100% chỉ với 1 request (mỗi bước decode đọc toàn bộ weights), và vẫn 100% khi throughput tăng gấp nhiều lần nhờ batching. `FB_USED` luôn cao vì vLLM giữ trước VRAM (`--gpu-memory-utilization`). Scale theo hai metric này thì lên với 1 người dùng và không bao giờ xuống.
 - **Không dùng riêng `num_requests_waiting`**: đủ replica thì waiting về 0, HPA tính ra cần ít replica hơn, scale xuống, waiting lại tăng (flapping). `running + waiting` đo tổng tải nên giữ nguyên khi đã đủ replica.
-- **Metric GPU kết hợp AND qua `scalingModifiers`**: _chờ bảng "Metric DCGM có trên RTX 4090/3060" của Người 3 (O2)_. Không thêm metric GPU thành trigger riêng vì trigger riêng là OR, metric luôn cao sẽ ghim số replica.
+- **Chưa dùng metric GPU**. Nếu cần thì kết hợp kiểu AND qua `scalingModifiers`, không thêm thành trigger riêng: các trigger được gộp kiểu OR, một metric luôn cao sẽ giữ số replica ở mức tối đa.
 
 ### 3. Sức chứa, SLO và ngưỡng
 
@@ -48,15 +48,15 @@ Baseline 1 replica, gọi thẳng vLLM, 512 token vào / 256 token ra (`loadtest
 | 16 | 3,90 s | 381 tok/s | 0,67 |
 | 32 | 8,84 s | 340 tok/s | 1,00 |
 
-- **SLO: _chưa chốt_** (SPEC ghi TTFT p95 ≤ 1 s, team-tasks ghi 2 s). Với 2 s: `C_max = 4`, target = 0,75 × 4 = **3**. Với 1 s: `C_max = 2`, target = **2**.
+- **SLO tạm: TTFT p95 ≤ 1 s** (theo SPEC), nên `C_max = 2` và target = **2** request/replica. Nếu nới lên 2 s thì `C_max = 4`, target = 0,75 × 4 = 3.
 - TTFT vượt SLO khi KV cache mới ~20–30%, nên `concurrency` là trigger quyết định; `kvcache` chỉ bắt trường hợp ít request nhưng prompt dài.
-- _Cần đo lại qua gateway bằng key `loadtest` trước khi chốt (A4)._
+- _Số trên đo gọi thẳng vLLM. Cần đo lại qua gateway trước khi chốt._
 
 ### 4. Tham số HPA
 
 | Tham số | Giá trị | Lý do |
 |---|---|---|
-| `minReplicaCount` | 1 | Không về 0: cold start vài phút |
+| `minReplicaCount` | 1 | Không về 0 vì cold start mất vài phút |
 | `maxReplicaCount` | 2 | 2 GPU |
 | `pollingInterval` | 15 s | Bằng chu kỳ scrape |
 | scaleUp | stabilization 0 s, +1 pod / 60 s | Lên sớm: pod mới mất ~2 phút mới nhận request |
@@ -71,13 +71,13 @@ Baseline 1 replica, gọi thẳng vLLM, 512 token vào / 256 token ra (`loadtest
 
 ## Hệ quả
 
-- **Phải sửa `serving/`** (Người 1 review): annotation `autoscalerClass: external`, strategy RollingUpdate. Apply InferenceService trước để KServe xoá HPA CPU, rồi mới apply ScaledObject (webhook KEDA từ chối nếu Deployment đã có HPA khác).
-- Ngưỡng thấp (3 request/replica) do 3060: chỉ vài người dùng đồng thời đã lên 2 replica.
+- **Có sửa `serving/`**: annotation `autoscalerClass: external`, strategy RollingUpdate. Apply InferenceService trước để KServe xoá HPA CPU, rồi mới apply ScaledObject (webhook KEDA từ chối nếu Deployment đã có HPA khác).
+- Ngưỡng thấp (2 request/replica) do 3060: chỉ vài người dùng đồng thời đã lên 2 replica.
 - Khi chỉ có 1 replica, rollout vẫn gây gián đoạn ngắn (pod duy nhất bị tắt trước); PDB chặn drain node đó.
 - Model trên PVC `local-path` chỉ đọc được ở node 1, nên đã chuyển sang bản chép trên mỗi node ở `/opt/models/llama31-8b`, mount `hostPath` (2026-10-27, `docs/runbooks/model-on-nodes.md`). 2 replica chạy trên 2 node, 20 request chia 9/11.
-- _Mở_: gateway trỏ ClusterIP qua `Backend` FQDN; Envoy giữ kết nối lâu nên có thể dồn tải vào 1 pod. Kiểm tra ở A2; nếu lệch, thử Service headless.
+- _Mở_: gateway trỏ ClusterIP qua `Backend` FQDN; Envoy giữ kết nối lâu nên có thể dồn tải vào 1 pod. Thử 20 request gọi thẳng Service thì chia 9/11; chưa đo qua gateway, nếu lệch thì thử Service headless.
 
-## Kết quả kiểm thử (A5)
+## Kết quả kiểm thử
 
 | # | Kịch bản | Kỳ vọng | Kết quả |
 |---|---|---|---|

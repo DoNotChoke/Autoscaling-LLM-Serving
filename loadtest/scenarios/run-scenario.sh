@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# Chạy một kịch bản kiểm thử autoscale (ADR 0002, mục "Kết quả kiểm thử"). Chạy trên node server, từ thư mục gốc repo.
+# Chạy một kịch bản test autoscale, kết quả lưu ở loadtest/results/<ngày>-autoscale/<S>/
+# Chạy trên node server, đứng ở thư mục gốc repo. Hướng dẫn: docs/runbooks/autoscaling.md
 # Usage: run-scenario.sh S1|S2|S3|S4|S5|S6
-#   S1 không tải 30 phút            S4 dao động quanh target 20 phút
-#   S2 1,5 × target 10 phút         S5 stream dài trong lúc scale xuống
-#   S3 dừng tải, chờ về 1 (sau S2)  S6 KEDA mất Prometheus 5 phút (chặn bằng NetworkPolicy, Prometheus vẫn chạy)
-# Cần: ScaledObject đã apply; Secret loadtest-api-key (khoá "key") trong namespace llm-serving, xem docs/runbooks/autoscaling.md
-# Kết quả: loadtest/results/<ngày>-autoscale/<S>/ gồm timeline.csv (watch.sh), requests.csv, summary.txt
+#   S1 không tải 30 phút           S4 tải lên xuống quanh ngưỡng 20 phút
+#   S2 1,5 × ngưỡng trong 10 phút  S5 stream dài trong lúc scale xuống
+#   S3 dừng tải, chờ về 1 replica  S6 KEDA không đọc được Prometheus 5 phút
 set -euo pipefail
 
 S="${1:?Usage: run-scenario.sh S1..S6}"
 NS=llm-serving
-TARGET="${TARGET:-3}"                       # threshold trigger concurrency trong ScaledObject
-HIGH=$(( (TARGET * 3 + 1) / 2 ))            # 1,5 × target, làm tròn lên
+# Lấy ngưỡng đang dùng trong ScaledObject
+TARGET="${TARGET:-$(kubectl -n "$NS" get scaledobject llama31-8b \
+  -o jsonpath='{.spec.triggers[?(@.name=="concurrency")].metadata.threshold}')}"
+HIGH=$(( (TARGET * 3 + 1) / 2 ))            # 1,5 × ngưỡng, làm tròn lên
+KEY_SECRET="${KEY_SECRET:-loadtest-api-key}"
 BASE_URL="${BASE_URL:-http://llm-gateway-envoy.envoy-gateway-system.svc}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 OUT="${OUT:-loadtest/results/$(date +%F)-autoscale/$S}"
 JOB="loadgen-$(tr '[:upper:]' '[:lower:]' <<<"$S")"
 
 mkdir -p "$OUT"
-kubectl -n "$NS" get secret loadtest-api-key >/dev/null
+kubectl -n "$NS" get secret "$KEY_SECRET" >/dev/null
 
 cleanup() {
   [[ -n ${WATCH_PID:-} ]] && kill "$WATCH_PID" 2>/dev/null || true
@@ -30,7 +32,7 @@ trap cleanup EXIT
 
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/summary.txt"; }
 
-# Job tạo tải dùng image vLLM (đã có sẵn trên node GPU, có aiohttp), không xin GPU
+# Tạo tải bằng Job, dùng lại image vLLM có sẵn trên node (có sẵn aiohttp)
 start_load() {  # <profile> [max-tokens]
   kubectl -n "$NS" create configmap loadgen --from-file="$DIR/loadgen.py" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -52,8 +54,8 @@ spec:
           env:
             - { name: BASE_URL, value: "$BASE_URL" }
             - name: API_KEY
-              valueFrom: { secretKeyRef: { name: loadtest-api-key, key: key } }
-            # Image vLLM đặt NVIDIA_VISIBLE_DEVICES=all; runtime mặc định là nvidia nên phải tắt để không thấy GPU
+              valueFrom: { secretKeyRef: { name: $KEY_SECRET, key: key } }
+            # Image vLLM để NVIDIA_VISIBLE_DEVICES=all, tắt đi để Job không đụng vào GPU
             - { name: NVIDIA_VISIBLE_DEVICES, value: void }
           resources:
             requests: { cpu: 200m, memory: 256Mi }
@@ -83,11 +85,11 @@ case "$S" in
   S2) start_load "600:$HIGH"; wait_load ;;
   S3) idle 1200 ;;  # scaleDown stabilization 600 s + 1 pod / 60 s, kỳ vọng về 1 trong ≤ 15 phút
   S4)
-    # 10 chu kỳ 2 phút: trên target 1 request rồi dưới target 1 request
+    # 10 lần: 1 phút trên ngưỡng, 1 phút dưới ngưỡng
     profile=$(for _ in $(seq 10); do printf '60:%d,60:%d,' $((TARGET + 1)) $((TARGET - 1)); done)
     start_load "${profile%,}"; wait_load ;;
   S5)
-    # Lên 2 replica, rồi chỉ còn 1 stream dài (~1024 token) liên tục để KEDA scale xuống khi đang stream
+    # Đẩy lên 2 replica, sau đó chỉ giữ 1 stream dài để KEDA scale xuống trong lúc đang stream
     start_load "300:$HIGH,1200:1" 1024; wait_load ;;
   S6)
     kubectl apply -f - >/dev/null <<EOF
@@ -101,7 +103,7 @@ spec:
     matchLabels: { app.kubernetes.io/name: prometheus }
   policyTypes: [Ingress]
   ingress:
-    # Cho mọi namespace trừ keda: Grafana, Alloy vẫn đọc được, Prometheus vẫn ghi diễn biến
+    # Chỉ chặn namespace keda, Grafana vẫn xem được bình thường
     - from:
         - namespaceSelector:
             matchExpressions:

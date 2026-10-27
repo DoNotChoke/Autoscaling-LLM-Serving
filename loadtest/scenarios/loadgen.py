@@ -1,8 +1,8 @@
-# Tạo tải theo profile cho kịch bản autoscale (S2, S4, S5): giữ đúng N request stream đồng thời trong từng đoạn.
-# Mỗi request ghi một dòng CSV ra stdout (run-scenario.sh lấy qua kubectl logs), tóm tắt từng đoạn ra stderr.
+# Giữ N request stream chạy song song theo từng đoạn thời gian, dùng cho run-scenario.sh
+# Mỗi request in một dòng CSV ra stdout, cuối mỗi đoạn in tóm tắt ra stderr
 # Usage: loadgen.py --profile 600:5,300:2 [--max-tokens 256] [--prompt-words 400]
-#   profile: danh sách <giây>:<số request đồng thời>; concurrency 0 = nghỉ
-# Env: BASE_URL (mặc định gateway trong cluster), API_KEY, MODEL
+#   profile: các đoạn <giây>:<số request song song>, 0 là nghỉ
+# Env: BASE_URL (mặc định là gateway trong cluster), API_KEY, MODEL
 import argparse
 import asyncio
 import json
@@ -27,7 +27,7 @@ def parse_profile(text):
 
 
 async def one_request(session, args, segment, rows):
-    # Prompt khác nhau mỗi request để prefix cache không làm TTFT thấp giả
+    # Thêm timestamp vào prompt để prefix cache không làm TTFT đẹp hơn thực tế
     words = f"{time.time_ns()} " + "Kubernetes autoscaling vLLM GPU " * (args.prompt_words // 4)
     body = {
         "model": MODEL,
@@ -55,7 +55,7 @@ async def one_request(session, args, segment, rows):
                         done = True
                 if not done:
                     error = "stream cắt trước [DONE]"
-    except Exception as exc:  # mất kết nối khi pod bị tắt cũng tính là lỗi
+    except Exception as exc:  # pod bị tắt giữa chừng cũng tính là lỗi
         error = type(exc).__name__
     end = time.time()
     ok = status == 200 and not error
@@ -86,7 +86,7 @@ async def main():
             if conc == 0:
                 await asyncio.sleep(seconds)
                 continue
-            # Request đang chạy khi hết đoạn vẫn được chạy xong (không huỷ giữa chừng)
+            # Hết giờ thì không gửi thêm, request đang chạy vẫn để chạy xong
             await asyncio.gather(*(worker(session, args, i, deadline, rows) for _ in range(conc)))
 
     for seg in sorted({r[0] for r in rows}):

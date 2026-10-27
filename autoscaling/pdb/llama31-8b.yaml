@@ -1,5 +1,5 @@
-# Drain node hoặc evict chủ động không được lấy đi replica cuối cùng.
-# Lưu ý: khi chỉ còn 1 replica, PDB này chặn drain node đó; scale lên 2 (hoặc xoá PDB) trước khi bảo trì.
+# Luôn giữ ít nhất 1 pod khi drain node. Lúc chỉ có 1 replica thì drain sẽ bị chặn,
+# muốn bảo trì node đó thì scale lên 2 trước
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

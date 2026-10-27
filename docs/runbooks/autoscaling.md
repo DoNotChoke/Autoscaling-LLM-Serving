@@ -12,7 +12,7 @@ vLLM /metrics ─► Prometheus (recording rule llm_serving:vllm_concurrency:sum
 | ScaledObject `llama31-8b` | | `llm-serving` | `autoscaling/scaledobjects/` |
 | PDB `llama31-8b` | | `llm-serving` | `autoscaling/pdb/` |
 
-Yêu cầu trước:
+Cần có trước:
 - 2 replica chạy được trên 2 node ([`model-on-nodes.md`](model-on-nodes.md)).
 - Prometheus của observability đang chạy, có recording rule `llm_serving:vllm_concurrency:sum` ([`observability.md`](observability.md)).
 
@@ -28,36 +28,35 @@ kubectl get apiservice v1beta1.external.metrics.k8s.io    # AVAILABLE True
 
 Lần đầu `keda-operator` có thể restart 1 lần trong lúc tạo cert, không sao.
 
-## 2. Chế độ quan sát (min = max = 2)
+## 2. Bật autoscale
 
-Thứ tự bắt buộc: InferenceService trước, ScaledObject sau. Nếu làm ngược, webhook KEDA từ chối vì Deployment còn
-HPA CPU của KServe.
+Phải apply InferenceService trước rồi mới tới ScaledObject. Làm ngược thì webhook KEDA từ chối, vì Deployment
+vẫn còn HPA CPU của KServe.
 
 ```bash
-# Kiểm tra Prometheus trả số trước
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090 &
-curl -s 'localhost:9090/api/v1/query' --data-urlencode \
-  'query=sum(llm_serving:vllm_concurrency:sum{namespace="llm-serving",model_name="llama31-8b"})'
+# Kiểm tra Prometheus đã có metric
+kubectl get --raw '/api/v1/namespaces/monitoring/services/kube-prometheus-stack-prometheus:9090/proxy/api/v1/query?query=llm_serving:vllm_concurrency:sum'
 
-# 1. Thêm annotation serving.kserve.io/autoscalerClass: external vào InferenceService → KServe xoá HPA của nó.
-#    KServe chép annotation ISVC xuống pod template nên 2 pod có thể restart lần lượt (RollingUpdate, luôn còn 1 pod)
+# InferenceService có annotation autoscalerClass: external, KServe sẽ xoá HPA của nó.
+# 2 pod có thể restart lần lượt, lúc nào cũng còn 1 pod chạy
 kubectl apply -f serving/kserve/models/llama31-8b/inferenceservice.yaml
 kubectl -n llm-serving get hpa                            # không còn llama31-8b-predictor
 
-# 2. PDB + ScaledObject
 kubectl apply -k autoscaling/pdb
 kubectl apply -k autoscaling/scaledobjects
-kubectl -n llm-serving get scaledobject llama31-8b        # READY True, ACTIVE theo tải
+kubectl -n llm-serving get scaledobject llama31-8b        # READY True
 kubectl -n llm-serving get hpa keda-hpa-llama31-8b        # TARGETS có số, không phải <unknown>
 ```
 
-Nghiệm thu: để chạy ít nhất 1 ngày, đối chiếu `hpa_desired` (`loadtest/scenarios/watch.sh`) với tải thật. Số replica
-HPA muốn phải hợp lý, không nhảy lên xuống liên tục.
+Không có tải thì khoảng 10 phút sau còn 1 replica.
 
-## 3. Bật autoscale 1 ↔ 2
+Muốn xem KEDA tính toán thế nào trước khi để nó scale thật thì tạm đặt `minReplicaCount: 2`. Khi đó HPA vẫn tính
+số replica cần nhưng không đổi được gì. Theo dõi bằng `loadtest/scenarios/watch.sh`.
 
-Sửa `minReplicaCount: 1` trong `autoscaling/scaledobjects/llama31-8b.yaml`, chốt `threshold` theo SLO (ADR 0002 mục 3),
-rồi `kubectl apply -k autoscaling/scaledobjects`. Không tải thì sau khoảng 10 phút còn 1 replica.
+## 3. Đổi ngưỡng
+
+Sửa `threshold` của trigger `concurrency` theo SLO (ADR 0002 mục 3) rồi `kubectl apply -k autoscaling/scaledobjects`.
+Không cần restart gì.
 
 ## 4. Kịch bản kiểm thử S1–S6
 
@@ -66,7 +65,10 @@ rồi `kubectl apply -k autoscaling/scaledobjects`. Không tải thì sau khoả
 bash serving/gateway/api-key.sh add loadtest              # in ra key
 kubectl -n llm-serving create secret generic loadtest-api-key --from-literal=key=<key vừa in>
 
-bash loadtest/scenarios/run-scenario.sh S2                # S1..S6; TARGET=<threshold> nếu khác 3
+bash loadtest/scenarios/run-scenario.sh S2                # S1..S6, ngưỡng tự đọc từ ScaledObject
+
+# Chưa có key loadtest thì gọi thẳng Service bằng key nội bộ (bỏ qua gateway)
+KEY_SECRET=vllm-api-key BASE_URL=http://llama31-8b-predictor.llm-serving.svc bash loadtest/scenarios/run-scenario.sh S2
 ```
 
 | # | Thời gian | Làm gì | Đạt khi |

@@ -7,16 +7,14 @@ metadata:
     app.kubernetes.io/part-of: llm-serving
   annotations:
     serving.kserve.io/deploymentMode: Standard
-    # Số replica do ScaledObject trong autoscaling/scaledobjects/ quyết định. "external": KServe xoá HPA
-    # của nó và bỏ qua replicas; "none" vẫn ép replicas = minReplicas nên giành với HPA (ADR 0002)
+    # Để KEDA quyết định số replica (autoscaling/scaledobjects/), KServe không tạo HPA riêng
     serving.kserve.io/autoscalerClass: external
 spec:
   predictor:
-    # Chỉ là số khởi tạo khi tạo Deployment; giới hạn thật nằm ở ScaledObject
-    minReplicas: 2
+    # Với external, KServe chỉ dùng số này lúc tạo Deployment
+    minReplicas: 1
     maxReplicas: 2
-    # Mỗi node 1 GPU, không có GPU thừa để tạo pod mới trước: tắt 1 pod rồi mới tạo pod thay thế,
-    # pod còn lại vẫn phục vụ (Recreate tắt cả 2 cùng lúc)
+    # Không có GPU dư để tạo pod mới trước, nên thay lần lượt từng pod. Recreate sẽ tắt cả 2 cùng lúc
     deploymentStrategy:
       type: RollingUpdate
       rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
@@ -28,9 +26,8 @@ spec:
     model:
       modelFormat: { name: vllm }
       runtime: vllm-openai
-      # Không dùng storageUri: PVC local-path chỉ mount được trên node tạo ra nó, pod ở node khác bị Pending.
-      # Model chép sẵn vào cùng đường dẫn trên mọi node GPU (docs/runbooks/model-on-nodes.md), mount ở dưới.
-      # Không mount vào /mnt/models: webhook KServe luôn tự thêm mount ở đó, trùng thì pod bị từ chối
+      # PVC local-path chỉ dùng được trên 1 node, nên model được chép sẵn lên từng node
+      # (docs/runbooks/model-on-nodes.md). Mount ở /models vì KServe luôn tự thêm một mount ở /mnt/models
       command: [vllm, serve, /models]
       args:
         - --served-model-name=llama31-8b
@@ -46,8 +43,7 @@ spec:
         - name: VLLM_API_KEY
           valueFrom:
             secretKeyRef: { name: vllm-api-key, key: key }
-      # Port viết bằng số: không có storageUri thì KServe gắn thêm sidecar agent, agent chỉ đọc được port số
-      # (port "http" → lỗi parse URL, pod không bao giờ Ready)
+      # Ghi port bằng số: không có storageUri thì KServe gắn thêm sidecar agent, mà agent không hiểu port "http"
       # Load weights + compile mất ~2 phút; cho tối đa 10 phút trước khi coi là hỏng
       startupProbe:
         httpGet: { path: /health, port: 8000 }
@@ -77,7 +73,6 @@ spec:
         emptyDir: { medium: Memory, sizeLimit: 2Gi }
       - name: model
         hostPath: { path: /opt/models/llama31-8b, type: Directory }
-    # Thiếu thư mục model thì pod lỗi ngay (hostPath type: Directory) thay vì chạy vLLM rỗng.
-    # Chỉ xếp lên node đã chép model
+    # Chỉ chạy trên node đã có model
     nodeSelector:
       llm-serving/model-llama31-8b: "true"

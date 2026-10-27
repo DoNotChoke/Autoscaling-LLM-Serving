@@ -1,9 +1,7 @@
-# KEDA v2.21.0 (chart keda 2.21.0). Cần >= 2.12 cho scalingModifiers, >= 2.18 để fallback chạy cả trigger metricType Value.
-# helm repo add kedacore https://kedacore.github.io/charts
-# helm upgrade --install keda kedacore/keda --version 2.21.0 -n keda --create-namespace -f platform/keda/values.yaml --wait
-# Xem docs/runbooks/autoscaling.md.
+# KEDA 2.21.0, cài theo docs/runbooks/autoscaling.md
+# Cần bản >= 2.18 thì fallback mới chạy với trigger metricType Value
 
-# Node có ~31 GiB RAM và đang chạy vLLM; mặc định chart cho limit 1 CPU / 1000Mi mỗi pod, ép xuống cho vừa lab
+# Mặc định chart cho mỗi pod tới 1 CPU / 1000Mi, lab không cần nhiều vậy
 resources:
   operator:
     requests: { cpu: 50m, memory: 64Mi }
@@ -15,8 +13,7 @@ resources:
     requests: { cpu: 20m, memory: 32Mi }
     limits: { cpu: 200m, memory: 128Mi }
 
-# Mở /metrics (keda_scaler_metrics_value, keda_scaler_errors_total) cho Người 3 scrape.
-# ServiceMonitor/PodMonitor do observability/monitors/ quản lý, không bật ở đây để KEDA cài được trước Prometheus Operator.
+# Mở /metrics để Prometheus scrape; ServiceMonitor để bên observability quản lý
 prometheus:
   operator:
     enabled: true

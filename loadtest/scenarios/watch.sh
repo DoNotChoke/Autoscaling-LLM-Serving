@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Ghi diễn biến autoscale mỗi INTERVAL giây ra CSV: số replica, quyết định của HPA, giá trị metric KEDA, fallback.
-# Chạy trên máy có kubectl. Usage: watch.sh <file.csv>   (dừng bằng kill hoặc Ctrl-C)
+# Cứ INTERVAL giây ghi lại số replica, số HPA muốn, giá trị metric và fallback vào file CSV
+# Usage: watch.sh <file.csv>   (Ctrl-C để dừng)
 set -uo pipefail
 
 OUT="${1:?Usage: watch.sh <file.csv>}"
@@ -15,7 +15,7 @@ while true; do
   spec=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null)
   ready=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
   desired=$(kubectl -n "$NS" get hpa "$HPA" -o jsonpath='{.status.desiredReplicas}' 2>/dev/null)
-  # Giá trị từng trigger, vd "s0-prometheus=1500m s1-prometheus=120m" (AverageValue chia theo replica)
+  # Giá trị từng trigger, vd "s0-prometheus=1500m s1-prometheus=120m"
   metrics=$(kubectl -n "$NS" get hpa "$HPA" \
     -o jsonpath='{range .status.currentMetrics[*]}{.external.metric.name}={.external.current.averageValue}{.external.current.value} {end}' 2>/dev/null)
   fallback=$(kubectl -n "$NS" get scaledobject "$SO" \

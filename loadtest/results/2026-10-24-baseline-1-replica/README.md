@@ -36,4 +36,4 @@ File thô: `c<N>.json` (output của `vllm bench serve`), `kv_c<N>.txt` (mẫu `
 | 1 s (SPEC) | 2 | 1,5 → 2 |
 | 2 s (team-tasks) | 4 | 3 |
 
-**Chưa chốt**: chờ Người 1 xác nhận SLO, và đo lại qua gateway bằng key `loadtest` trước khi bật autoscale (A4).
+**Chưa chốt**: SLO đang để tạm 1 s; cần đo lại qua gateway trước khi chốt ngưỡng.

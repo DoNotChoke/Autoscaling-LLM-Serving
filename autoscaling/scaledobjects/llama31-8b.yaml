@@ -1,6 +1,5 @@
-# KEDA tự quản lý HPA cho predictor. InferenceService phải có autoscalerClass: external
-# (KServe xoá HPA của nó và không đụng tới replicas); apply InferenceService trước, ScaledObject sau.
-# Lý do chọn metric và tham số: docs/adr/0002-autoscaling.md
+# Autoscale predictor theo số request vLLM đang xử lý. InferenceService cần annotation
+# autoscalerClass: external để KServe không tạo HPA riêng. Giải thích chi tiết ở docs/adr/0002-autoscaling.md
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -11,12 +10,10 @@ metadata:
 spec:
   scaleTargetRef:
     name: llama31-8b-predictor
-  # Chế độ quan sát (A3): min = max nên HPA tính nhưng không đổi được gì.
-  # Nghiệm thu A3 xong mới đổi sang 1/2 (A4).
-  minReplicaCount: 2
+  minReplicaCount: 1
   maxReplicaCount: 2
   pollingInterval: 15
-  # Mất Prometheus thì giữ đủ sức chứa thay vì đứng yên ở số replica cũ
+  # Không lấy được metric thì chạy đủ 2 replica cho an toàn
   fallback:
     failureThreshold: 3
     replicas: 2
@@ -26,24 +23,21 @@ spec:
         scaleUp:
           stabilizationWindowSeconds: 0
           policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
-        # Lớn hơn nhiều lần cold start (~2 phút): xoá pod rồi tạo lại tốn hơn giữ thêm 10 phút
+        # Load lại model mất vài phút nên chờ 10 phút hết tải mới bớt pod
         scaleDown:
           stabilizationWindowSeconds: 600
           policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
   triggers:
-    # Tổng tải (running + waiting), HPA chia cho số replica. Không dùng riêng waiting: đủ replica thì
-    # waiting về 0, HPA scale xuống rồi lại lên (flapping)
+    # running + waiting, tính trung bình mỗi replica
     - type: prometheus
       name: concurrency
       metricType: AverageValue
       metadata:
         serverAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
-        # Recording rule của observability (running + waiting theo namespace, model_name), xem docs/runbooks/observability.md.
-        # "or vector(0)": chưa có pod nào được scrape thì trả 0 thay vì lỗi
         query: sum(llm_serving:vllm_concurrency:sum{namespace="llm-serving", model_name="llama31-8b"}) or vector(0)
-        # Tạm: SLO TTFT p95 2s → C_max = 4 (loadtest/results/2026-10-24-baseline-1-replica.md), × 0,75. Chờ chốt SLO
-        threshold: "3"
-    # Phụ: ít request nhưng prompt dài làm đầy KV cache trước khi concurrency vượt ngưỡng
+        # Tạm theo SLO TTFT p95 1s: 1 replica giữ được ~2 request (loadtest/results/2026-10-24-baseline-1-replica)
+        threshold: "2"
+    # Ít request nhưng prompt dài vẫn có thể làm đầy KV cache
     - type: prometheus
       name: kvcache
       metricType: Value
