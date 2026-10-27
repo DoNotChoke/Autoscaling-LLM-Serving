@@ -37,10 +37,10 @@ spec:
       name: concurrency
       metricType: AverageValue
       metadata:
-        # Địa chỉ Prometheus của Người 3, xác nhận lại khi O1 xong
-        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        serverAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+        # Recording rule của observability (running + waiting theo namespace, model_name), xem docs/runbooks/observability.md.
         # "or vector(0)": chưa có pod nào được scrape thì trả 0 thay vì lỗi
-        query: (sum(vllm:num_requests_running{namespace="llm-serving"}) + sum(vllm:num_requests_waiting{namespace="llm-serving"})) or vector(0)
+        query: sum(llm_serving:vllm_concurrency:sum{namespace="llm-serving", model_name="llama31-8b"}) or vector(0)
         # Tạm: SLO TTFT p95 2s → C_max = 4 (loadtest/results/2026-10-24-baseline-1-replica.md), × 0,75. Chờ chốt SLO
         threshold: "3"
     # Phụ: ít request nhưng prompt dài làm đầy KV cache trước khi concurrency vượt ngưỡng
@@ -48,6 +48,6 @@ spec:
       name: kvcache
       metricType: Value
       metadata:
-        serverAddress: http://prometheus-operated.monitoring.svc:9090
-        query: avg(vllm:kv_cache_usage_perc{namespace="llm-serving"}) or vector(0)
+        serverAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+        query: avg(vllm:kv_cache_usage_perc{job="monitoring/vllm", namespace="llm-serving", model_name="llama31-8b"}) or vector(0)
         threshold: "0.8"
