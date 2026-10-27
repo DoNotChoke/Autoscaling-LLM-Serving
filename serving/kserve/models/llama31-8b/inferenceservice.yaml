@@ -7,13 +7,11 @@ metadata:
     app.kubernetes.io/part-of: llm-serving
   annotations:
     serving.kserve.io/deploymentMode: Standard
-    # Số replica do ScaledObject trong autoscaling/scaledobjects/ quyết định. "external": KServe xoá HPA
-    # của nó và bỏ qua replicas; "none" vẫn ép replicas = minReplicas nên giành với HPA (ADR 0002)
-    serving.kserve.io/autoscalerClass: external
 spec:
   predictor:
-    # Chỉ là số khởi tạo khi tạo Deployment; giới hạn thật nằm ở ScaledObject
-    minReplicas: 1
+    # Cố định 2 replica (1 pod / node GPU). Bước autoscale (A3) mới đổi sang autoscalerClass: external
+    # + ScaledObject trong autoscaling/scaledobjects/ (ADR 0002)
+    minReplicas: 2
     maxReplicas: 2
     # Mỗi node 1 GPU, không có GPU thừa để tạo pod mới trước: tắt 1 pod rồi mới tạo pod thay thế,
     # pod còn lại vẫn phục vụ (Recreate tắt cả 2 cùng lúc)
@@ -28,12 +26,14 @@ spec:
     model:
       modelFormat: { name: vllm }
       runtime: vllm-openai
-      # PVC do serving/models tạo; current -> revision đang dùng (xem serving/models/models.md)
-      storageUri: pvc://model-llama31-8b/current
+      # Không dùng storageUri: PVC local-path chỉ mount được trên node tạo ra nó, pod ở node khác bị Pending.
+      # Model chép sẵn vào cùng đường dẫn trên mọi node GPU (docs/runbooks/model-on-nodes.md), mount ở dưới.
+      # Không mount vào /mnt/models: webhook KServe luôn tự thêm mount ở đó, trùng thì pod bị từ chối
+      command: [vllm, serve, /models]
       args:
         - --served-model-name=llama31-8b
         - --max-model-len=16384
-        - --gpu-memory-utilization=0.90
+        - --gpu-memory-utilization=0.80
         # Mặc định 0 = huỷ request đang chạy khi SIGTERM; phải < grace (120) - preStop (15)
         - --shutdown-timeout=90
         # Tool calling (Open WebUI gửi tools + tool_choice "auto"); template đi kèm image vLLM cho Llama 3.1
@@ -44,17 +44,19 @@ spec:
         - name: VLLM_API_KEY
           valueFrom:
             secretKeyRef: { name: vllm-api-key, key: key }
+      # Port viết bằng số: không có storageUri thì KServe gắn thêm sidecar agent, agent chỉ đọc được port số
+      # (port "http" → lỗi parse URL, pod không bao giờ Ready)
       # Load weights + compile mất ~2 phút; cho tối đa 10 phút trước khi coi là hỏng
       startupProbe:
-        httpGet: { path: /health, port: http }
+        httpGet: { path: /health, port: 8000 }
         periodSeconds: 10
         failureThreshold: 60
       readinessProbe:
-        httpGet: { path: /health, port: http }
+        httpGet: { path: /health, port: 8000 }
         periodSeconds: 10
       # Ngưỡng rộng để không giết pod chỉ vì /health chậm khi đang chịu tải nặng
       livenessProbe:
-        httpGet: { path: /health, port: http }
+        httpGet: { path: /health, port: 8000 }
         periodSeconds: 30
         timeoutSeconds: 10
         failureThreshold: 5
@@ -67,6 +69,13 @@ spec:
         limits: { nvidia.com/gpu: "1", memory: 12Gi } # page cache khi load model bị chặn ở đây, kernel tự thu hồi (đã thử: 0 OOM)
       volumeMounts:
         - { name: shm, mountPath: /dev/shm }
+        - { name: model, mountPath: /models, readOnly: true }
     volumes:
       - name: shm
         emptyDir: { medium: Memory, sizeLimit: 2Gi }
+      - name: model
+        hostPath: { path: /opt/models/llama31-8b, type: Directory }
+    # Thiếu thư mục model thì pod lỗi ngay (hostPath type: Directory) thay vì chạy vLLM rỗng.
+    # Chỉ xếp lên node đã chép model
+    nodeSelector:
+      llm-serving/model-llama31-8b: "true"

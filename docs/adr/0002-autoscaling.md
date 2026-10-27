@@ -74,7 +74,7 @@ Baseline 1 replica, gọi thẳng vLLM, 512 token vào / 256 token ra (`loadtest
 - **Phải sửa `serving/`** (Người 1 review): annotation `autoscalerClass: external`, strategy RollingUpdate. Apply InferenceService trước để KServe xoá HPA CPU, rồi mới apply ScaledObject (webhook KEDA từ chối nếu Deployment đã có HPA khác).
 - Ngưỡng thấp (3 request/replica) do 3060: chỉ vài người dùng đồng thời đã lên 2 replica.
 - Khi chỉ có 1 replica, rollout vẫn gây gián đoạn ngắn (pod duy nhất bị tắt trước); PDB chặn drain node đó.
-- _Mở_: model trên PVC `local-path` chỉ đọc được ở node 1; node 2 cần bản model riêng (đề xuất: tải vào cùng đường dẫn trên mỗi node, mount `hostPath`). Cần ADR riêng cùng Người 1.
+- Model trên PVC `local-path` chỉ đọc được ở node 1, nên đã chuyển sang bản chép trên mỗi node ở `/opt/models/llama31-8b`, mount `hostPath` (2026-10-27, `docs/runbooks/model-on-nodes.md`). 2 replica chạy trên 2 node, 20 request chia 9/11.
 - _Mở_: gateway trỏ ClusterIP qua `Backend` FQDN; Envoy giữ kết nối lâu nên có thể dồn tải vào 1 pod. Kiểm tra ở A2; nếu lệch, thử Service headless.
 
 ## Kết quả kiểm thử (A5)
