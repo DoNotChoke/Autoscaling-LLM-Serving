@@ -1,0 +1,14 @@
+# Luôn giữ ít nhất 1 pod khi drain node. Lúc chỉ có 1 replica thì drain sẽ bị chặn,
+# muốn bảo trì node đó thì scale lên 2 trước
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llama31-8b
+  labels:
+    model: llama31-8b
+    app.kubernetes.io/part-of: llm-serving
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      serving.kserve.io/inferenceservice: llama31-8b

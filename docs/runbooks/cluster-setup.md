@@ -63,15 +63,29 @@ KUBECONFIG=~/.kube/gpu-lab.yaml kubectl get nodes
 - GPU Operator để `cdi.enabled: false`, vì toolkit trên host không sinh CDI spec cho operator.
 - Node chưa gắn taint `nvidia.com/gpu`, vì single-node phải chạy cả pod hệ thống. Thêm taint khi có node CPU riêng.
 
-## Join node thứ 2 (để sau)
+## Join node thứ 2
+
+Hai máy phải thông nhau qua TCP 6443 (API server), TCP 10250 (kubelet) và UDP 8472 (flannel VXLAN). Đã kiểm chứng 2026-10-24: 2 máy RTX 3060 cùng LAN `192.168.1.0/24`.
 
 ```bash
-# Trên node 1
-cat /var/lib/rancher/k3s/server/node-token
-# Trên node 2 (sau khi chạy prepare-gpu-node.sh)
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.36.5+k3s1 \
-  K3S_URL=https://<ip-node-1>:6443 K3S_TOKEN=<token> sh -s - agent --default-runtime nvidia
+# Trên node 1: lấy token (bí mật, không commit, không dán vào chat)
+sudo cat /var/lib/rancher/k3s/server/node-token
+
+# Trên node 2
+sudo bash infra/node/prepare-gpu-node.sh
+sudo K3S_URL=https://<ip-lan-node-1>:6443 NODE_IP=<ip-lan-node-2> bash infra/node/install-k3s.sh   # hỏi token
 ```
+
+`NODE_IP` bắt buộc khi node có nhiều mạng (ZeroTier, Tailscale, Docker bridge): thiếu thì k3s có thể lấy nhầm IP và pod giữa 2 node không gọi được nhau.
+
+Kiểm tra trên node 1:
+
+```bash
+kubectl get nodes -o custom-columns=NAME:.metadata.name,IP:.status.addresses[0].address,GPU:.status.allocatable.nvidia\\.com/gpu
+# 2 node, mỗi node GPU=1 (GPU Operator tự cài device plugin + DCGM lên node mới trong ~1 phút)
+```
+
+Gỡ node 2: `kubectl drain <node> --ignore-daemonsets && kubectl delete node <node>` trên node 1, rồi `/usr/local/bin/k3s-agent-uninstall.sh` trên node 2.
 
 ## Gỡ cài đặt
 

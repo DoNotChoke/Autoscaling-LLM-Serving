@@ -1,0 +1,3 @@
+# Config cho node agent (join cụm có sẵn). install-k3s.sh copy vào /etc/rancher/k3s/config.yaml khi có K3S_URL.
+# Giống node server: pod GPU không cần runtimeClassName
+default-runtime: nvidia

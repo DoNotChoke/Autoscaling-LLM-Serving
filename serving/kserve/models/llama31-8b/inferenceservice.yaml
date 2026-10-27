@@ -7,12 +7,17 @@ metadata:
     app.kubernetes.io/part-of: llm-serving
   annotations:
     serving.kserve.io/deploymentMode: Standard
+    # Để KEDA quyết định số replica (autoscaling/scaledobjects/), KServe không tạo HPA riêng
+    serving.kserve.io/autoscalerClass: external
 spec:
   predictor:
-    # Chưa autoscale: min = max = 1. Phần autoscaling sẽ đổi sang autoscalerClass: keda
+    # Với external, KServe chỉ dùng số này lúc tạo Deployment
     minReplicas: 1
-    maxReplicas: 1
-    deploymentStrategy: { type: Recreate } # chỉ có 1 GPU, không rollout song song được
+    maxReplicas: 2
+    # Không có GPU dư để tạo pod mới trước, nên thay lần lượt từng pod. Recreate sẽ tắt cả 2 cùng lúc
+    deploymentStrategy:
+      type: RollingUpdate
+      rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
     # Lớn hơn preStop (15s) + request dài nhất (~60s với max_tokens 2048)
     terminationGracePeriodSeconds: 120
     labels:
@@ -21,12 +26,13 @@ spec:
     model:
       modelFormat: { name: vllm }
       runtime: vllm-openai
-      # PVC do serving/models tạo; current -> revision đang dùng (xem serving/models/models.md)
-      storageUri: pvc://model-llama31-8b/current
+      # PVC local-path chỉ dùng được trên 1 node, nên model được chép sẵn lên từng node
+      # (docs/runbooks/model-on-nodes.md). Mount ở /models vì KServe luôn tự thêm một mount ở /mnt/models
+      command: [vllm, serve, /models]
       args:
         - --served-model-name=llama31-8b
         - --max-model-len=16384
-        - --gpu-memory-utilization=0.90
+        - --gpu-memory-utilization=0.80
         # Mặc định 0 = huỷ request đang chạy khi SIGTERM; phải < grace (120) - preStop (15)
         - --shutdown-timeout=90
         # Tool calling (Open WebUI gửi tools + tool_choice "auto"); template đi kèm image vLLM cho Llama 3.1
@@ -37,17 +43,18 @@ spec:
         - name: VLLM_API_KEY
           valueFrom:
             secretKeyRef: { name: vllm-api-key, key: key }
+      # Ghi port bằng số: không có storageUri thì KServe gắn thêm sidecar agent, mà agent không hiểu port "http"
       # Load weights + compile mất ~2 phút; cho tối đa 10 phút trước khi coi là hỏng
       startupProbe:
-        httpGet: { path: /health, port: http }
+        httpGet: { path: /health, port: 8000 }
         periodSeconds: 10
         failureThreshold: 60
       readinessProbe:
-        httpGet: { path: /health, port: http }
+        httpGet: { path: /health, port: 8000 }
         periodSeconds: 10
       # Ngưỡng rộng để không giết pod chỉ vì /health chậm khi đang chịu tải nặng
       livenessProbe:
-        httpGet: { path: /health, port: http }
+        httpGet: { path: /health, port: 8000 }
         periodSeconds: 30
         timeoutSeconds: 10
         failureThreshold: 5
@@ -60,6 +67,12 @@ spec:
         limits: { nvidia.com/gpu: "1", memory: 12Gi } # page cache khi load model bị chặn ở đây, kernel tự thu hồi (đã thử: 0 OOM)
       volumeMounts:
         - { name: shm, mountPath: /dev/shm }
+        - { name: model, mountPath: /models, readOnly: true }
     volumes:
       - name: shm
         emptyDir: { medium: Memory, sizeLimit: 2Gi }
+      - name: model
+        hostPath: { path: /opt/models/llama31-8b, type: Directory }
+    # Chỉ chạy trên node đã có model
+    nodeSelector:
+      llm-serving/model-llama31-8b: "true"

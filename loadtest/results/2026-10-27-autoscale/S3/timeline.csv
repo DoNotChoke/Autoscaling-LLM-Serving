@@ -1,0 +1,79 @@
+time,spec_replicas,ready_replicas,hpa_desired,hpa_metrics,so_fallback,pods
+2026-10-27T18:36:33,2,2,2,s0-prometheus=1500m s1-prometheus=62m,False,Running/2/2 Running/2/2
+2026-10-27T18:36:48,2,2,2,s0-prometheus=500m s1-prometheus=21m,False,Running/2/2 Running/2/2
+2026-10-27T18:37:04,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:37:19,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:37:35,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:37:50,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:38:06,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:38:21,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:38:36,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:38:52,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:39:07,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:39:23,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:39:38,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:39:54,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:40:09,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:40:25,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:40:40,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:40:56,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:41:11,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:41:27,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:41:42,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:41:57,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:42:13,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:42:28,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:42:44,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:42:59,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:43:15,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:43:30,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:43:46,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:44:01,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:44:16,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:44:32,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:44:47,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:45:03,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:45:18,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:45:34,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:45:49,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:46:05,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:46:20,2,2,2,s0-prometheus=0 s1-prometheus=0,False,Running/2/2 Running/2/2
+2026-10-27T18:46:35,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Terminating/2/2 Running/2/2
+2026-10-27T18:46:51,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Terminating/1/2 Running/2/2
+2026-10-27T18:47:06,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:47:22,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:47:37,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:47:53,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:48:08,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:48:23,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:48:39,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:48:54,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:49:10,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:49:25,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:49:41,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:49:56,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:50:12,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:50:27,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:50:43,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:50:58,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:51:14,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:51:29,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:51:44,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:52:00,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:52:15,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:52:31,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:52:46,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:53:02,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:53:17,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:53:33,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:53:48,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:54:03,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:54:19,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:54:34,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:54:50,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:55:05,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:55:21,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:55:36,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:55:52,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:56:07,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2
+2026-10-27T18:56:23,1,1,1,s0-prometheus=0 s1-prometheus=0,False,Running/2/2

@@ -1,0 +1,21 @@
+# KEDA 2.21.0, cài theo docs/runbooks/autoscaling.md
+# Cần bản >= 2.18 thì fallback mới chạy với trigger metricType Value
+
+# Mặc định chart cho mỗi pod tới 1 CPU / 1000Mi, lab không cần nhiều vậy
+resources:
+  operator:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  metricServer:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  webhooks:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+# Mở /metrics để Prometheus scrape; ServiceMonitor để bên observability quản lý
+prometheus:
+  operator:
+    enabled: true
+  metricServer:
+    enabled: true
