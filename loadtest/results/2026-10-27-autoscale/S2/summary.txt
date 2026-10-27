@@ -1,4 +1,4 @@
-[17:54:25] S2 bắt đầu (target 2, 1,5 × target = 3, base http://llama31-8b-predictor.llm-serving.svc)
-[17:54:25] tải: profile 600:3, max_tokens 256
-{"segment": 0, "requests": 315, "errors": 0, "ttft_p50": 1.288, "ttft_p95": 1.337}
-[18:04:33] S2 xong, kết quả ở loadtest/results/2026-10-27-autoscale/S2
+[18:26:26] S2 bắt đầu (target 2, 1,5 × target = 3, base http://llama31-8b-predictor.llm-serving.svc)
+[18:26:26] tải: profile 600:3, max_tokens 256
+{"segment": 0, "requests": 346, "errors": 0, "ttft_p50": 0.472, "ttft_p95": 1.28}
+[18:36:32] S2 xong, kết quả ở loadtest/results/2026-10-27-autoscale/S2

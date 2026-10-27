@@ -82,8 +82,8 @@ Baseline 1 replica, gọi thẳng vLLM, 512 token vào / 256 token ra (`loadtest
 | # | Kịch bản | Kỳ vọng | Kết quả |
 |---|---|---|---|
 | S1 | Không tải 30 phút | 1 replica, không scale | _chưa chạy_ |
-| S2 | ~1,5 × target, 10 phút | Lên 2 trong ≤ 5 phút, TTFT về dưới SLO | Lên 2 sau 2 phút 4 s, 0 lỗi. TTFT chưa giảm vì pod mới không nhận request (keep-alive), chạy lại |
-| S3 | Dừng tải sau S2 | Về 1 trong ≤ 15 phút | Về 1 sau 10 phút 19 s |
+| S2 | ~1,5 × target, 10 phút | Lên 2 trong ≤ 5 phút, TTFT về dưới SLO | Lên 2 sau 2 phút 4 s, 0 lỗi, TTFT p95 1,29 s → 0,67 s (gọi thẳng Service, chưa qua gateway) |
+| S3 | Dừng tải sau S2 | Về 1 trong ≤ 15 phút | Về 1 sau 10 phút 2 s |
 | S4 | Dao động quanh target 20 phút | ≤ 2 lần đổi số replica | _chưa chạy_ |
 | S5 | Đang stream thì scale xuống | 0 lỗi | _chưa chạy_ |
 | S6 | Tắt Prometheus 5 phút | Fallback 2 replica | _chưa chạy_ |
