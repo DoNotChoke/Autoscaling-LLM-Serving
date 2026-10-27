@@ -1,0 +1,3 @@
+[18:04:34] S3 bắt đầu (target 2, 1,5 × target = 3, base http://llama31-8b-predictor.llm-serving.svc)
+[18:04:34] không tải 1200 giây
+[18:24:34] S3 xong, kết quả ở loadtest/results/2026-10-27-autoscale/S3

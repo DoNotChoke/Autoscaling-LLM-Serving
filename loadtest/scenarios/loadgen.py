@@ -79,7 +79,10 @@ async def main():
     rows = []
     print("start_ts,segment,status,ok,ttft_s,e2e_s,error", flush=True)
     timeout = aiohttp.ClientTimeout(total=600)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    # Mỗi request một kết nối mới. Giữ kết nối thì Service ClusterIP dồn hết vào pod cũ,
+    # pod mới scale lên không nhận được request nào
+    connector = aiohttp.TCPConnector(force_close=True)
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
         for i, (seconds, conc) in enumerate(parse_profile(args.profile)):
             print(f"[{time.strftime('%H:%M:%S')}] đoạn {i}: {seconds}s, concurrency {conc}", file=sys.stderr, flush=True)
             deadline = time.time() + seconds

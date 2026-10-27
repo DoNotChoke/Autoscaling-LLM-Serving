@@ -75,15 +75,15 @@ Baseline 1 replica, gọi thẳng vLLM, 512 token vào / 256 token ra (`loadtest
 - Ngưỡng thấp (2 request/replica) do 3060: chỉ vài người dùng đồng thời đã lên 2 replica.
 - Khi chỉ có 1 replica, rollout vẫn gây gián đoạn ngắn (pod duy nhất bị tắt trước); PDB chặn drain node đó.
 - Model trên PVC `local-path` chỉ đọc được ở node 1, nên đã chuyển sang bản chép trên mỗi node ở `/opt/models/llama31-8b`, mount `hostPath` (2026-10-27, `docs/runbooks/model-on-nodes.md`). 2 replica chạy trên 2 node, 20 request chia 9/11.
-- _Mở_: gateway trỏ ClusterIP qua `Backend` FQDN; Envoy giữ kết nối lâu nên có thể dồn tải vào 1 pod. Thử 20 request gọi thẳng Service thì chia 9/11; chưa đo qua gateway, nếu lệch thì thử Service headless.
+- _Mở_: gateway trỏ ClusterIP qua `Backend` FQDN, mà ClusterIP chỉ chia tải theo kết nối. S2 cho thấy client giữ kết nối thì pod mới scale lên nhận 0 request (`loadtest/results/2026-10-27-autoscale/`). Envoy cũng giữ kết nối lâu nên cần đo qua gateway; hướng sửa là Service headless để Envoy thấy từng pod và chia theo request.
 
 ## Kết quả kiểm thử
 
 | # | Kịch bản | Kỳ vọng | Kết quả |
 |---|---|---|---|
 | S1 | Không tải 30 phút | 1 replica, không scale | _chưa chạy_ |
-| S2 | ~1,5 × target, 10 phút | Lên 2 trong ≤ 5 phút, TTFT về dưới SLO | _chưa chạy_ |
-| S3 | Dừng tải sau S2 | Về 1 trong ≤ 15 phút | _chưa chạy_ |
+| S2 | ~1,5 × target, 10 phút | Lên 2 trong ≤ 5 phút, TTFT về dưới SLO | Lên 2 sau 2 phút 4 s, 0 lỗi. TTFT chưa giảm vì pod mới không nhận request (keep-alive), chạy lại |
+| S3 | Dừng tải sau S2 | Về 1 trong ≤ 15 phút | Về 1 sau 10 phút 19 s |
 | S4 | Dao động quanh target 20 phút | ≤ 2 lần đổi số replica | _chưa chạy_ |
 | S5 | Đang stream thì scale xuống | 0 lỗi | _chưa chạy_ |
 | S6 | Tắt Prometheus 5 phút | Fallback 2 replica | _chưa chạy_ |
