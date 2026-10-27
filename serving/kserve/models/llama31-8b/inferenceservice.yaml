@@ -7,10 +7,12 @@ metadata:
     app.kubernetes.io/part-of: llm-serving
   annotations:
     serving.kserve.io/deploymentMode: Standard
+    # Số replica do ScaledObject trong autoscaling/scaledobjects/ quyết định. "external": KServe xoá HPA
+    # của nó và bỏ qua replicas; "none" vẫn ép replicas = minReplicas nên giành với HPA (ADR 0002)
+    serving.kserve.io/autoscalerClass: external
 spec:
   predictor:
-    # Cố định 2 replica (1 pod / node GPU). Bước autoscale (A3) mới đổi sang autoscalerClass: external
-    # + ScaledObject trong autoscaling/scaledobjects/ (ADR 0002)
+    # Chỉ là số khởi tạo khi tạo Deployment; giới hạn thật nằm ở ScaledObject
     minReplicas: 2
     maxReplicas: 2
     # Mỗi node 1 GPU, không có GPU thừa để tạo pod mới trước: tắt 1 pod rồi mới tạo pod thay thế,
