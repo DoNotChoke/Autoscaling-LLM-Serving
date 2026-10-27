@@ -1,6 +1,6 @@
 # Spec: LLM Serving (Cluster + Storage + Serving, sau đó Gateway + Load test)
 
-> Phạm vi: toàn bộ phần **LLM Serving** của dự án GPU LLM Serving Platform (xem [README](README.md), [kiến trúc](docs/architecture.html)), gồm cả việc **dựng cluster k3s có GPU** cho lab.
+> Phạm vi: toàn bộ phần **LLM Serving** của dự án GPU LLM Serving Platform (xem [README](../../README.md), [kiến trúc](../architecture.html)), gồm cả việc **dựng cluster k3s có GPU** cho lab.
 > Giai đoạn hiện tại: **1 máy, chưa autoscale**. Gateway và load test làm sau.
 > Không bao gồm: Prometheus, KEDA/HPA, Karpenter, Loki/Grafana. Phần này chỉ định nghĩa **hợp đồng giao tiếp** với các thành phần đó (xem [Hợp đồng giao tiếp](#hợp-đồng-giao-tiếp-với-phần-còn-lại)).
 > Trạng thái: **DRAFT, chờ duyệt**.
@@ -63,8 +63,8 @@ Phiên bản cụ thể **được pin trong Helm values / manifest khi cài** v
 | Kubernetes (k3s) | 1.30+ | |
 | KServe | **v0.21.0 (pin)** + cert-manager v1.21.2 | Chế độ `Standard` (trước v0.15 gọi là RawDeployment); chart `kserve-crd` + `kserve-resources`. Hỗ trợ `autoscalerClass: keda` cho giai đoạn sau |
 | vLLM (`vllm/vllm-openai`) | **0.31.0 (pin)** | Cùng bản với `vastai/vllm` ở giai đoạn 0. Dùng image chính thức, **không** dùng `kserve-huggingfaceserver`, để giữ nguyên metrics `vllm:*` và API OpenAI gốc |
-| Envoy Gateway | **v1.8.1 (pin)** | Xem [`SPEC-gateway.md`](SPEC-gateway.md) |
-| Envoy AI Gateway | **v1.1.0 (pin)** | Xem [`SPEC-gateway.md`](SPEC-gateway.md); cùng Redis `8.2.4-alpine3.22` cho rate limit |
+| Envoy Gateway | **v1.8.1 (pin)** | Xem [`gateway.md`](gateway.md) |
+| Envoy AI Gateway | **v1.1.0 (pin)** | Xem [`gateway.md`](gateway.md); cùng Redis `8.2.4-alpine3.22` cho rate limit |
 | Công cụ load test | `vllm bench serve` (có sẵn trong image vLLM) | Không thêm dependency mới |
 
 ---
@@ -76,7 +76,7 @@ Phiên bản cụ thể **được pin trong Helm values / manifest khi cài** v
 helm upgrade --install cert-manager jetstack/cert-manager --version v1.21.2 -n cert-manager --create-namespace --set crds.enabled=true --wait
 helm upgrade --install kserve-crd oci://ghcr.io/kserve/charts/kserve-crd --version v0.21.0 -n kserve --create-namespace --wait
 helm upgrade --install kserve-resources oci://ghcr.io/kserve/charts/kserve-resources --version v0.21.0 -n kserve -f platform/kserve/values.yaml --wait
-# Gateway: xem lệnh trong SPEC-gateway.md
+# Gateway: xem lệnh trong gateway.md
 
 # Model store: PVC + Job tải model (chạy lại Job = verify checksum)
 kubectl -n llm-serving create secret generic hf-token --from-literal=token=$HF_TOKEN
@@ -108,7 +108,7 @@ Sau khi phần platform dùng Argo CD, mọi `kubectl apply` ở trên được 
 ```
 platform/
 ├── kserve/values.yaml                  # Bật raw deployment, tắt Knative/Istio
-├── envoy-gateway/values.yaml           # Xem SPEC-gateway.md
+├── envoy-gateway/values.yaml           # Xem docs/specs/gateway.md
 ├── redis/                              # Redis cho rate limit
 └── cloudflared/                        # Cloudflare Tunnel tới gateway
 
@@ -127,7 +127,7 @@ serving/
 │   ├── runtimes/vllm.yaml              # ClusterServingRuntime vllm-openai
 │   └── models/llama31-8b/
 │       └── inferenceservice.yaml
-├── gateway/                            # Gateway, route, apiKeyAuth, rate limit: xem SPEC-gateway.md
+├── gateway/                            # Gateway, route, apiKeyAuth, rate limit: xem docs/specs/gateway.md
 ├── images/vllm/                        # Chỉ dùng nếu phải tùy biến image
 └── tests/
     └── smoke.sh                        # Kiểm tra end-to-end qua gateway
@@ -237,7 +237,7 @@ spec:
 
 ### `gateway`
 
-Đặc tả chi tiết ở [`SPEC-gateway.md`](SPEC-gateway.md). Đã chốt: có Redis để rate limit theo token (100k token/phút cho mỗi key), người dùng truy cập qua **Cloudflare Tunnel** (HTTPS, VM không mở cổng), mỗi người một API key, giữ key nội bộ ở vLLM.
+Đặc tả chi tiết ở [`gateway.md`](gateway.md). Đã chốt: có Redis để rate limit theo token (100k token/phút cho mỗi key), người dùng truy cập qua **Cloudflare Tunnel** (HTTPS, VM không mở cổng), mỗi người một API key, giữ key nội bộ ở vLLM.
 
 ### `loadtest`
 

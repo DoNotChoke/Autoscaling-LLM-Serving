@@ -5,6 +5,8 @@ Nền tảng phục vụ mô hình ngôn ngữ lớn (LLM) trên GPU, chạy tr�
 > Tài liệu kiến trúc chi tiết, có sơ đồ: [`docs/architecture.html`](docs/architecture.html)
 >
 > Triển khai từ đầu (máy trắng → model chạy trên K8s): [`docs/runbooks/deploy-from-scratch.md`](docs/runbooks/deploy-from-scratch.md)
+>
+> Đặc tả: [`Serving`](docs/specs/serving.md) · [`Gateway`](docs/specs/gateway.md) · [`Observability`](docs/specs/observability.md)
 
 ---
 

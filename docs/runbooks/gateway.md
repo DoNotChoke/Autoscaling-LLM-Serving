@@ -1,6 +1,6 @@
 # Runbook: Gateway (Envoy AI Gateway + Redis + Cloudflare Quick Tunnel)
 
-Spec: [`SPEC-gateway.md`](../../SPEC-gateway.md). Hướng dẫn cho người dùng: [`docs/user-guide.md`](../user-guide.md).
+Spec: [`gateway.md`](../specs/gateway.md). Hướng dẫn cho người dùng: [`user-guide.md`](../user-guide.md).
 
 ```
 Người dùng ─HTTPS─► https://<random>.trycloudflare.com ─► cloudflared ─► llm-gateway-envoy (ClusterIP)
