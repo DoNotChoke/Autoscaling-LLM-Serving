@@ -117,52 +117,45 @@ Với SLO TTFT p95 ≤ 2 s, một replica giữ được 6 request song song. Ng
 
 ### 5.1. Cách làm
 
-- Ngày 30/10, 09:24:46–09:31:13. Bắt đầu từ 1 replica (node-2).
-- 100 luồng chạy trên node-1, mỗi luồng gửi liên tục `POST /v1/chat/completions` qua gateway, prompt ngắn (~20 token), `max_tokens 256`, mỗi request một kết nối mới. Tất cả dùng chung một API key.
-- Ảnh chụp từ Grafana, khung thời gian 09:23:16–09:33:13.
+- Ngày 30/10, 09:54:09–10:00:26. Bắt đầu từ 1 replica (node-2).
+- 100 luồng chạy trên node-1, mỗi luồng gửi liên tục `POST /v1/chat/completions` qua gateway: prompt ngắn (48 token sau chat template), `max_tokens 256`, mỗi request một kết nối mới.
+- Tải chia cho 4 API key, 25 luồng mỗi key. Một key chỉ có 100k token/phút, trong khi 2 replica xử lý tới ~140k token/phút; lần chạy trước dùng 1 key nên phần lớn thời gian bị gateway trả 429. Luồng nhận 429 thì chờ 2 s rồi gửi lại.
+- Ảnh chụp từ Grafana, khung thời gian 09:52:39–10:01:26.
 
 ### 5.2. Kết quả
 
 | Chỉ số | Giá trị |
 |---|---|
-| Request thành công (200) | 2.373 |
-| Bị rate limit (429) | 82.900 |
-| Lỗi kết nối phía client (curl `000`) | 10.029 |
-| KEDA quyết định lên 2 replica | 09:25:02, 16 s sau khi có tải |
-| Pod thứ 2 Ready | ~09:26:15, khoảng 1 phút 30 s sau quyết định scale |
-| Throughput sinh token đỉnh | ~1.600 tok/s (2 replica) |
-| TTFT p95 | ~4,6 s khi 1 replica; giảm dần còn ~1,5 s sau khi có 2 replica và tải giảm |
-
-Con số 429 và lỗi kết nối không phải lỗi của hệ thống mà do cách bắn tải:
-
-- 2 replica sinh ~1.600 tok/s, tức ~96k token đầu ra mỗi phút, cộng token đầu vào thì vượt hạn mức 100k token/phút của một key. Từ 09:27:57 gateway bắt đầu trả 429, đúng như cấu hình.
-- Vòng lặp tải không có backoff: nhận 429 là gửi lại ngay, nên số request bị chặn lên tới ~300 req/s. Lỗi `000` xuất hiện cùng lúc, nhiều khả năng do hết cổng TCP tạm phía máy bắn tải (mỗi request mở một kết nối mới); chưa kiểm chứng.
-
-Để đo sức chứa thật cần chia tải cho nhiều key hoặc dùng key có hạn mức riêng cho load test.
+| Request thành công | 2.440 / 2.440 (không có 429, không lỗi kết nối) |
+| KEDA quyết định lên 2 replica | 09:54:40, ~30 s sau khi có tải |
+| Pod thứ 2 Ready | 09:55:58, 1 phút 18 s sau quyết định scale |
+| Thời gian mỗi request (256 token) | p50 15,3 s · p95 26,7 s · max 33,4 s |
+| Throughput sinh token đỉnh | ~1.750 tok/s (2 replica) |
+| TTFT p95 | ~4,7 s khi 1 replica, giảm dần sau khi có 2 replica |
 
 ### 5.3. Autoscaling Overview
 
 ![Autoscaling Overview](docs/images/grafana-autoscaling-overview.png)
 
-- Concurrency lên ~100 ngay khi bắt đầu. Pod `6kxm7` (node-2) một mình chạy 95–100 request, KV cache chạm 99% và có tới 20 request phải chờ.
-- Pod `9qtps` (node-1) Ready lúc ~09:26:15 nhưng nhận tải chậm: 3 phút đầu chỉ 5–30 request, trong khi pod cũ vẫn 70–90. Đến ~09:29 hai pod mới cân bằng (~50 mỗi bên). Lý do: các kết nối Envoy → vLLM đang phục vụ request dài thì không đóng, nên chỉ khi chúng kết thúc thì kết nối mới mới có cơ hội rơi vào pod mới. Ở tải 4 hoặc 30 request, hiện tượng này gần như không thấy.
-- Sau khi có pod thứ 2, không còn request phải chờ.
+- Concurrency giữ ~100 suốt bài test. Trong 1 phút 50 s đầu, pod `6kxm7` (node-2) một mình chạy 65–100 request, KV cache chạm 99% và có lúc 29 request phải chờ.
+- Pod `r92d8` (node-1) Ready lúc 09:55:58. Sau đó không còn request phải chờ.
+- Tải chia không đều: pod mới tăng dần từ 0 lên ~40 request, pod cũ giảm từ ~80 xuống ~60, tức khoảng 40/60 sau 4 phút. Kết nối Envoy → vLLM đang phục vụ request dài (15–30 s) thì chưa đóng, nên phải chờ chúng kết thúc thì kết nối mới mới có cơ hội rơi vào pod mới. Với tải 30 request trước đó, hai pod chia 50/50 gần như ngay lập tức.
 
 ### 5.4. LLM Serving Overview
 
 ![LLM Serving Overview](docs/images/grafana-llm-serving-overview.png)
 
-- TTFT p95 tăng lên ~4,6 s trong lúc chỉ có 1 replica, vượt SLO 2 s. Đây là khoảng trống khi chờ pod mới (~1,5 phút) cộng thời gian pod mới bắt đầu nhận tải.
-- Inter-token latency p95 lên ~120 ms khi 100 request cùng decode trên 1 GPU, về ~75 ms khi tải chia ra.
-- Throughput tăng dần tới ~1.600 tok/s. Đường này là trung bình trượt 5 phút nên tăng chậm hơn thực tế.
+- TTFT p95 lên ~4,7 s khi chỉ có 1 replica, vượt SLO 2 s. Đây là khoảng chờ pod mới (~1,3 phút) cộng thời gian pod mới bắt đầu nhận tải. Đường TTFT là phân vị trên cửa sổ trượt nên giảm chậm hơn thực tế.
+- Inter-token latency p95 ~120 ms khi 100 request cùng decode trên 1 GPU, về ~90 ms khi chia cho 2 GPU.
+- Throughput tăng tới ~1.750 tok/s (trung bình trượt 5 phút).
 
 ### 5.5. GPU Overview
 
 ![GPU Overview](docs/images/grafana-gpu-overview.png)
 
-- `GPU_UTIL` lên 100% ngay khi có tải và giữ nguyên dù số request trên mỗi GPU thay đổi từ 30 tới 100. Đây là lý do không dùng metric này để scale.
-- Công suất 150–170 W mỗi GPU khi có tải, ~15–20 W khi rảnh.
-- Nhiệt độ GPU node-1 lên ~88 °C, node-2 ~80 °C.
+- `GPU_UTIL` lên 100% ngay khi có tải và giữ nguyên, dù số request trên mỗi GPU thay đổi từ 20 tới 100. Đây là lý do không dùng metric này để scale.
+- Công suất 150–170 W mỗi GPU khi có tải, 15–20 W khi rảnh.
+- Nhiệt độ GPU node-1 lên ~90 °C, node-2 ~80 °C.
 - VRAM ~9 GB mỗi GPU, không đổi theo tải vì vLLM cấp phát trước.
 - Không có lỗi XID.
 
@@ -170,9 +163,9 @@ Con số 429 và lỗi kết nối không phải lỗi của hệ thống mà do
 
 ![Gateway Overview](docs/images/grafana-gateway-overview.png)
 
-- Trước 09:28 gần như toàn bộ request là 2xx, nhưng số request/giây thấp vì mỗi request mất vài chục giây (p95 30–47 s, chủ yếu là thời gian sinh 256 token khi GPU bận).
-- Từ 09:28, 4xx (429) và rate-limit events tăng dần tới ~300–400/s, cho thấy rate limit theo token hoạt động. Độ trễ p95 tụt về gần 0 vì phần lớn request bị chặn ngay tại gateway.
-- Không có 5xx.
+- Toàn bộ response là 2xx; không có 4xx, 5xx hay rate-limit event.
+- Độ trễ p95 tại gateway ~28–30 s, gần bằng thời gian sinh 256 token khi GPU bận. Đỉnh ~47 s lúc chỉ có 1 replica.
+- Request rate hiển thị tăng dần tới ~7 req/s vì là trung bình trượt 5 phút.
 
 ## 6. Tài liệu liên quan
 

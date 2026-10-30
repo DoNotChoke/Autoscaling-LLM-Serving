@@ -46,7 +46,7 @@
 
   <!-- Cụm -->
   <rect x="20" y="180" width="1160" height="645" rx="10" fill="none" stroke="#333" stroke-width="1.6" stroke-dasharray="8 5"/>
-  <text x="36" y="202" class="t">Cụm k3s v1.36 · 2 node cùng LAN 192.168.1.0/24 · quản trị từ xa qua Tailscale</text>
+  <text x="36" y="202" class="t">Cụm k3s v1.36 · 2 node cùng mạng LAN · quản trị từ xa qua Tailscale</text>
 
   <!-- Open WebUI -->
   <rect class="box gw" x="390" y="225" width="200" height="50" rx="6"/>
@@ -75,8 +75,8 @@
 
   <!-- Node 1 -->
   <rect class="box" x="40" y="520" width="370" height="285" rx="8" fill="#fafafa"/>
-  <text x="56" y="542" class="t">Node 1 · s12gbn3 (control-plane)</text>
-  <text x="56" y="559" class="s">i7-12700 · 31 GB RAM · RTX 3060 12 GB · driver 595</text>
+  <text x="56" y="542" class="t">node-1 (control-plane + GPU)</text>
+  <text x="56" y="559" class="s">31 GB RAM · RTX 3060 12 GB · driver 595</text>
   <rect class="box pod" x="56" y="575" width="338" height="96" rx="6"/>
   <text x="225" y="596" text-anchor="middle" class="t">Pod vLLM 0.31 (KServe Standard)</text>
   <text x="225" y="614" text-anchor="middle" class="s">Llama-3.1-8B-Instruct AWQ INT4 · max-model-len 16384</text>
@@ -96,11 +96,11 @@
 
   <!-- Node 2 -->
   <rect class="box" x="430" y="520" width="370" height="285" rx="8" fill="#fafafa"/>
-  <text x="446" y="542" class="t">Node 2 · ubuntu (worker)</text>
-  <text x="446" y="559" class="s">i5-12400F · 31 GB RAM · RTX 3060 12 GB · driver 595</text>
+  <text x="446" y="542" class="t">node-2 (worker GPU)</text>
+  <text x="446" y="559" class="s">31 GB RAM · RTX 3060 12 GB · driver 595</text>
   <rect class="box pod" x="446" y="575" width="338" height="96" rx="6"/>
   <text x="615" y="596" text-anchor="middle" class="t">Pod vLLM 0.31 (KServe Standard)</text>
-  <text x="615" y="614" text-anchor="middle" class="s">cùng model, cùng tham số với Node 1</text>
+  <text x="615" y="614" text-anchor="middle" class="s">cùng model, cùng tham số với node-1</text>
   <text x="615" y="630" text-anchor="middle" class="s">KEDA bật/tắt pod theo tải</text>
   <text x="615" y="646" text-anchor="middle" class="s">Deployment tự chọn pod bị xoá khi scale xuống</text>
   <rect class="box" x="446" y="685" width="160" height="44" rx="6"/>
