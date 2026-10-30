@@ -1,253 +1,184 @@
-# GPU LLM Serving Platform
+# Báo cáo: Nền tảng phục vụ LLM trên GPU có autoscale
 
-Nền tảng phục vụ mô hình ngôn ngữ lớn (LLM) trên GPU, chạy trên Kubernetes, **tự động scale theo tải thật** ở cả hai mức: số replica model server và số node GPU.
+Cập nhật: 30/10/2026
 
-> Tài liệu kiến trúc chi tiết, có sơ đồ: [`docs/architecture.html`](docs/architecture.html)
->
-> Triển khai từ đầu (máy trắng → model chạy trên K8s): [`docs/runbooks/deploy-from-scratch.md`](docs/runbooks/deploy-from-scratch.md)
->
-> Đặc tả: [`Serving`](docs/specs/serving.md) · [`Gateway`](docs/specs/gateway.md) · [`Observability`](docs/specs/observability.md)
+## 1. Kết quả chính
 
----
+- Llama-3.1-8B-Instruct chạy trên cụm k3s 2 node, mỗi node một RTX 3060 12 GB, qua KServe + vLLM.
+- Người dùng gọi API kiểu OpenAI hoặc chat trên Open WebUI. Mọi request đi qua Envoy AI Gateway: kiểm tra API key, giới hạn 100k token/phút cho mỗi key.
+- Prometheus thu metric của vLLM, GPU (DCGM) và gateway; Grafana có 4 dashboard; Alertmanager có rule cảnh báo.
+- KEDA tự scale vLLM giữa 1 và 2 replica theo số request đang xử lý. Kiểm thử với 30 request đồng thời: lên 2 replica sau 15 s, pod mới phục vụ sau 1 phút 33 s, tải chia 50/50, về 1 replica sau khoảng 10 phút hết tải, 1.871/1.871 request thành công.
 
-## Mục lục
+## 2. Kiến trúc
 
-- [Mục tiêu](#mục-tiêu)
-- [Kiến trúc tổng thể](#kiến-trúc-tổng-thể)
-- [Bốn luồng chính](#bốn-luồng-chính)
-- [Thành phần](#thành-phần)
-- [Chiến lược autoscaling](#chiến-lược-autoscaling)
-- [KServe hay Ray Serve](#kserve-hay-ray-serve)
-- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
-- [Quy ước chung](#quy-ước-chung)
-- [Lộ trình](#lộ-trình)
-- [Điểm dễ sai khi chạy thật](#điểm-dễ-sai-khi-chạy-thật)
-- [Tài liệu tham khảo](#tài-liệu-tham-khảo)
+![Kiến trúc](docs/architecture.svg)
 
----
+| Lớp | Thành phần | Phiên bản |
+|---|---|---|
+| Cụm | k3s (1 control-plane + 1 worker), NVIDIA Container Toolkit, GPU Operator | k3s v1.36.5, CTK 1.20.1, GPU Operator v26.7.2 |
+| Serving | KServe (Standard mode), ClusterServingRuntime vLLM | KServe v0.21.0, vLLM v0.31.0 |
+| Model | Llama-3.1-8B-Instruct AWQ INT4, chép sẵn vào `/opt/models/llama31-8b` trên mỗi node | `hugging-quants/...-AWQ-INT4@db1f81a` |
+| Gateway | Envoy Gateway + Envoy AI Gateway, Redis cho rate limit | EG v1.8.1, AI Gateway v1.1.0 |
+| Truy cập ngoài | Cloudflare quick tunnel (1 cho API, 1 cho Open WebUI) | cloudflared 2026.10.2 |
+| Giao diện | Open WebUI | v0.12.3 |
+| Observability | kube-prometheus-stack, Loki, Alloy | |
+| Autoscale | KEDA, ScaledObject + HPA | KEDA 2.21.0 |
 
-## Mục tiêu
+### Phần cứng
 
-- Cung cấp **API tương thích OpenAI** (`/v1/chat/completions`, `/v1/completions`) có hỗ trợ streaming.
-- **Tự scale replica** theo hàng đợi request của vLLM, và **tự thêm hoặc bớt node GPU** khi thiếu hoặc dư tài nguyên.
-- Bám **SLO** về độ trễ (TTFT p95) và tỷ lệ lỗi, không chỉ nhìn GPU utilization.
-- Quan sát đầy đủ qua metrics, logs và traces trên cùng một Grafana.
-- Theo dõi **chi phí**: $/GPU-hour và chi phí trên 1M token.
-- Toàn bộ hạ tầng và cấu hình được quản lý bằng code trong Git (Terraform + Argo CD).
+| Node | Vai trò | CPU / RAM | GPU | Ổ đĩa |
+|---|---|---|---|---|
+| `s12gbn3-system-product-name` (192.168.1.147) | control-plane + GPU | i7-12700 / 31 GB | RTX 3060 12 GB, driver 595.99 | 457 GB, đang dùng ~83% |
+| `ubuntu` (192.168.1.129) | worker GPU | i5-12400F / 31 GB | RTX 3060 12 GB, driver 595.91 | 233 GB, dùng 40% |
 
-## Kiến trúc tổng thể
+Hai máy cùng LAN; k3s nói chuyện qua LAN, Tailscale chỉ dùng để quản trị từ xa. Máy server dùng chung với chủ máy (có LiteLLM, Docker, giao diện đồ hoạ).
 
-```
-                         ┌──────────────────────────── KUBERNETES CLUSTER ────────────────────────────┐
- Client (OpenAI API) ──► │ Envoy AI Gateway ──► KServe InferenceService ──► vLLM pods (GPU)           │
-                         │  authN · rate-limit      (hoặc RayService)          │ :8000/metrics        │
-                         │  routing · retry                                    │                      │
-                         │                                                     ▼                      │
-                         │  DCGM exporter :9400 ───────────────────────► Prometheus ──► Alertmanager ─┼─► Slack / PagerDuty
-                         │                                                │                           │
-                         │                                   PromQL       ▼                           │
-                         │                              KEDA ──► ScaledObject ──► HPA ──► replicas    │
-                         │                                                                            │
-                         │  Pod Pending (thiếu GPU) ──► Karpenter / Cluster Autoscaler ──► GPU node ──┼─► Cloud API
-                         │                                                                            │
-                         │  Alloy (DaemonSet) ──► Loki ──┐                                            │
-                         │  OTel Collector ──► Tempo ────┼──► Grafana ◄── Prometheus                  │
-                         │                     S3 / GCS ◄┘                                            │
-                         └────────────────────────────────────────────────────────────────────────────┘
-   Ngoài cluster: Container + model registry (ECR · S3 · HF mirror) · Git + CI/CD + Argo CD · Terraform
-```
+## 3. Đã làm theo từng phần
 
-Các plane chính:
+### 3.1. Cụm và GPU
 
-| Plane | Vai trò |
-|---|---|
-| **Serving (GPU)** | Gateway, KServe/Ray Serve, vLLM. Nhận request và sinh token. |
-| **Metrics & Autoscaling** | GPU Operator, DCGM, Prometheus, KEDA, HPA, Karpenter. Đo tải và ra quyết định scale. |
-| **Observability** | Alloy, Loki, Tempo, Grafana, Alertmanager, OpenCost. Quan sát, cảnh báo, tính chi phí. |
-| **Platform** | Terraform, Argo CD, CI/CD, registry. Dựng và đồng bộ mọi thứ từ Git. |
+- Script `infra/node/prepare-gpu-node.sh` (cài toolkit, kiểm tra driver và dung lượng đĩa) và `install-k3s.sh` (có thêm chế độ agent để join node thứ 2).
+- containerd của k3s dùng `nvidia` làm runtime mặc định, pod GPU không cần `runtimeClassName`.
+- GPU Operator chỉ bật device plugin, GPU feature discovery và dcgm-exporter; driver và toolkit cài sẵn trên host.
+- Giữ cố định gói kernel và module NVIDIA bằng `apt-mark hold` trên máy server, sau sự cố driver ở mục 5.
 
-## Bốn luồng chính
+### 3.2. Model và serving
 
-**1. Request**
-1. Client gọi API tương thích OpenAI tới Envoy AI Gateway.
-2. Gateway xác thực, giới hạn theo token, chọn backend theo model.
-3. Request đi tới Service của InferenceService (hoặc Ray Serve).
-4. vLLM gộp request bằng continuous batching và stream token về client.
+- Phiên bản đầu chạy trên VM RTX 4090 24 GB với bản BF16, model tải bằng Job vào PVC `local-path`. Khi chuyển sang RTX 3060 thì BF16 (15 GB) không vừa, đổi sang AWQ INT4 (5,4 GB). vLLM tự nhận AWQ và dùng kernel Marlin.
+- PVC `local-path` chỉ gắn được vào một node, nên khi có 2 node, model được chép sẵn vào cùng đường dẫn trên mỗi node và mount `hostPath` chỉ đọc (`docs/runbooks/model-on-nodes.md`). Node có model mới được gắn nhãn `llm-serving/model-llama31-8b=true`.
+- Tham số vLLM: `max-model-len 16384`, `gpu-memory-utilization 0.80` (chừa VRAM cho giao diện đồ hoạ trên máy server), tool calling cho Open WebUI (`llama3_json`).
+- KV cache mỗi replica: 18.400 token, đủ một request 16K.
+- Vòng đời pod: startup probe tối đa 10 phút, `preStop` 15 s, `--shutdown-timeout=90`, `terminationGracePeriodSeconds 120`, nên tắt pod không làm đứt request đang stream.
+- RollingUpdate `maxSurge 0, maxUnavailable 1` (không có GPU thứ 3) và PDB `minAvailable 1`.
 
-**2. Metrics → quyết định scale**
-1. vLLM và DCGM exporter mở endpoint `/metrics`.
-2. Prometheus scrape qua ServiceMonitor / PodMonitor.
-3. KEDA chạy PromQL theo `pollingInterval` và đưa kết quả vào external metrics API.
-4. HPA tính `ceil(current × metric / target)` rồi chỉnh số replica.
+### 3.3. Gateway
 
-**3. Scale node GPU**
-1. Pod mới ở trạng thái Pending vì không còn GPU trống.
-2. Karpenter hoặc Cluster Autoscaler gọi cloud API để thêm GPU node.
-3. GPU Operator cài driver và device plugin trên node mới.
-4. Pod được schedule, tải weights, qua readiness probe rồi bắt đầu nhận traffic.
+- `AIGatewayRoute` đọc trường `model` trong body để định tuyến, timeout 300 s.
+- API key mỗi người một key, lưu trong Secret, quản lý bằng `serving/gateway/api-key.sh add|revoke|list`. Không cần restart khi thêm hay thu hồi.
+- Rate limit theo token thật lấy từ `usage` của response, đếm trong Redis: 100k token/phút cho mỗi key.
+- Gateway tự gắn key nội bộ khi gọi vLLM; client không biết key này.
+- `ClientTrafficPolicy` nâng giới hạn body lên 4 MiB (mặc định ~32 KiB làm Open WebUI bị 413).
+- Access log JSON ghi client, model, mã trạng thái, thời gian và số token; không ghi body hay key.
 
-**4. Logs và traces**
-1. Alloy (DaemonSet) đọc log container trên mỗi node.
-2. Gắn label `namespace`, `pod`, `model` rồi đẩy sang Loki.
-3. Loki lưu chunk trên object storage.
-4. Grafana truy vấn LogQL song song với PromQL, dùng chung label để đối chiếu.
+### 3.4. Open WebUI
 
-## Thành phần
+- Dùng chung một key gateway. Admin được tạo trước khi mở URL công khai; sau đó Open WebUI tự tắt đăng ký, admin tạo tài khoản cho từng người.
+- Phải tắt Builtin Tools: mỗi tin nhắn tốn thêm khoảng 8.000 token.
 
-| Tầng | Thành phần | Vai trò | Lưu ý |
+### 3.5. Observability
+
+- Prometheus scrape 15 s, giữ 7 ngày. PodMonitor cho vLLM và Envoy, ServiceMonitor cho DCGM và các thành phần gateway.
+- Recording rule: `llm_serving:vllm_concurrency:sum` (running + waiting), TTFT p50/p95, inter-token latency p95, tok/s, request và lỗi tại gateway.
+- Alert: vLLM down, lỗi XID của GPU, TTFT cao, KV cache gần đầy, tỉ lệ 5xx, pod restart liên tục.
+- 4 dashboard (GPU, Serving, Gateway, Autoscaling) lưu JSON trong git, nạp vào Grafana qua ConfigMap. Grafana chỉ truy cập qua `kubectl port-forward` và SSH tunnel.
+- Metric GPU thu được trên RTX 3060: 16 metric DCGM cơ bản (util, VRAM, công suất, nhiệt độ, clock, XID...). Nhóm `DCGM_FI_PROF_*` (tensor, DRAM active) không có trên dòng GeForce.
+
+### 3.6. Autoscale
+
+- KServe đặt `autoscalerClass: external` để không tạo HPA riêng; KEDA sinh HPA duy nhất trỏ vào Deployment `llama31-8b-predictor`.
+- Hai trigger, HPA lấy giá trị lớn hơn:
+
+| Trigger | Metric | Ngưỡng |
+|---|---|---|
+| `concurrency` | running + waiting, chia trung bình mỗi replica | 4 |
+| `kvcache` | trung bình `vllm:kv_cache_usage_perc` | 0,8 |
+
+- Lên ngay, thêm tối đa 1 pod/phút. Xuống sau 600 s không cần đến. Mất metric 3 lần liên tiếp thì giữ 2 replica.
+- Không dùng `GPU_UTIL` hay `FB_USED`: `GPU_UTIL` lên gần 100% với 1 request vì mỗi bước decode đọc toàn bộ weights, còn `FB_USED` luôn cao vì vLLM giữ trước VRAM. Scale theo hai metric này thì có 1 người dùng đã lên 2 replica và không bao giờ xuống. Trên 3060, metric GPU duy nhất có tương quan với tải là công suất (`POWER_USAGE`); chưa đưa vào trigger.
+
+## 4. Số liệu đo
+
+### 4.1. vLLM so với Transformers (RTX 4090, BF16, 256 token ra)
+
+| | TTFT | Thời gian 1 request | Throughput |
 |---|---|---|---|
-| Edge | Envoy AI Gateway | Điểm vào duy nhất: authN, rate-limit theo token, routing theo model, retry, timeout | Timeout dài cho response stream (SSE) |
-| Serving | KServe InferenceService | Quản lý vòng đời model server, tải model từ `storageUri`, canary | `autoscalerClass: keda` |
-| Serving | vLLM | Engine suy luận: continuous batching, PagedAttention, xuất metrics | 1 pod = 1 replica; model lớn hơn 1 GPU thì dùng tensor parallel |
-| Serving | KubeRay + Ray Serve | Phương án thay KServe khi cần pipeline nhiều model hoặc logic Python | Bật GCS fault tolerance cho Ray head |
-| GPU | NVIDIA GPU Operator | Driver, container toolkit, device plugin, GFD, DCGM | Taint `nvidia.com/gpu` |
-| GPU | DCGM exporter | `DCGM_FI_DEV_GPU_UTIL`, `FB_USED`, `POWER_USAGE`, nhiệt độ | DaemonSet, cổng 9400 |
-| Metrics | Prometheus Operator | Time-series, ServiceMonitor, recording rule, alert rule | Thanos hoặc Mimir khi cần lưu dài hạn |
-| Metrics | Alertmanager | Gom và định tuyến cảnh báo | Cảnh báo theo SLO |
-| Autoscale | KEDA | PromQL → `external.metrics.k8s.io` → sinh HPA | |
-| Autoscale | HPA | Tính và chỉnh số replica | Tự cấu hình `behavior`, không dùng mặc định |
-| Autoscale | KubeRay autoscaler | Thêm Ray worker pod (chỉ nhánh B) | |
-| Autoscale | Karpenter / CA | Thêm hoặc bớt GPU node | Pool on-demand cho tải nền, spot cho đỉnh tải |
-| Logs | Grafana Alloy | Thu log container | Thay Promtail (hết hỗ trợ từ 02/03/2026) |
-| Logs | Loki | Lưu và truy vấn log, chunk nằm trên S3 | Giữ ít label |
-| Traces | OTel Collector + Tempo | Trace request từ gateway tới vLLM | Tùy chọn |
-| Viz | Grafana | Dashboard và alert | Provision bằng code |
-| Cost | OpenCost | GPU-hour → chi phí theo namespace và model | Kết hợp throughput để ra $/1M token |
-| Platform | Git, CI/CD, Argo CD, Terraform | GitOps, build image, hạ tầng | |
-| Platform | Registry + model store | Image và weights; LocalModelCache trên NVMe | Yếu tố quyết định để giảm cold start |
+| vLLM, 1 request | 0,036 s | 4,29 s | 60 tok/s |
+| Transformers `generate()`, 1 request | 0,034 s | 7,60 s | 34 tok/s |
+| vLLM, 8 request song song | | 4,4 s cho cả 8 | 463 tok/s |
+| Transformers, 8 request song song | TTFT tối đa 55 s | 63 s cho cả 8 | 33 tok/s |
 
-## Chiến lược autoscaling
+Chênh lệch chính nằm ở batching: vLLM gộp 8 request vào cùng một bước decode, Transformers xử lý tuần tự.
 
-| Tín hiệu | PromQL | Vai trò |
-|---|---|---|
-| Hàng đợi + request đang chạy | `sum(vllm:num_requests_running) + sum(vllm:num_requests_waiting)` | **Trigger chính**. Threshold là số request mỗi replica chịu được, đo bằng load test |
-| KV cache | `avg(vllm:kv_cache_usage_perc)` | Guard rail. Gần 1.0 nghĩa là sắp thiếu bộ nhớ cho request mới |
-| TTFT p95 | `histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[2m])))` | SLO và cảnh báo; có thể dùng làm trigger phụ |
-| GPU util (DCGM) | `avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL[5m]))` | Cho dashboard và chi phí. **Không dùng làm trigger duy nhất**, vì continuous batching đẩy chỉ số này lên cao dù còn dư công suất |
+### 4.2. Sức chứa 1 replica (RTX 3060, AWQ, 512 token vào / 256 token ra, gọi thẳng vLLM)
 
-Tham số HPA mặc định của dự án (sẽ chỉnh lại sau load test):
+| Request song song | TTFT p95 | Throughput | KV cache max |
+|---|---|---|---|
+| 2 | 0,05 s | 121 tok/s | 0,08 |
+| 4 | 1,25 s | 181 tok/s | 0,17 |
+| 5 | 1,56 s | 212 tok/s | 0,20 |
+| 6 | 1,86 s | 242 tok/s | 0,25 |
+| 7 | 2,16 s | 268 tok/s | 0,29 |
+| 8 | 2,18 s | 283 tok/s | 0,33 |
+| 16 | 3,90 s | 381 tok/s | 0,67 |
 
-| Tham số | Giá trị | Lý do |
-|---|---|---|
-| `minReplicas` | 2 | Cao hơn tải nền một chút; production không scale về 0 |
-| `maxReplicas` | 8 | Trên đỉnh tải và nằm trong quota GPU |
-| `pollingInterval` | 15s | |
-| scale-up | không có stabilization, tối đa +2 pod / 60s | Phản ứng nhanh khi tải tăng |
-| scale-down | stabilization 900s, tối đa −1 pod / 120s | Dài hơn thời gian khởi động một replica, tránh flapping |
+Với SLO TTFT p95 ≤ 2 s, một replica giữ được 6 request song song. Ngưỡng scale đặt 4 (0,75 × 6, làm tròn xuống) để còn dư trong khoảng 1,5 phút chờ pod mới. Ban đầu SLO là 1 s, ngưỡng 2; nới lên 2 s ngày 28/10 vì với 1 s chỉ vài người dùng đã phải bật GPU thứ 2.
 
-> Tên metric `vllm:*` có thể đổi giữa các phiên bản vLLM (ví dụ `gpu_cache_usage_perc` thành `kv_cache_usage_perc`). Luôn kiểm tra `/metrics` của đúng bản đang chạy trước khi viết query.
+## 5. Thực nghiệm khác: 100 request đồng thời
 
-## KServe hay Ray Serve
+### 5.1. Cách làm
 
-| Tiêu chí | A · KServe + vLLM | B · KubeRay + Ray Serve |
-|---|---|---|
-| Điều khiển | CRD Kubernetes, GitOps thuần | Ray Serve app, khai báo qua CRD `RayService` |
-| Scale replica | KEDA + HPA từ Prometheus | Serve controller, theo `target_ongoing_requests` |
-| Scale node | Karpenter / CA | KubeRay autoscaler, rồi tới Karpenter / CA |
-| Nhiều model, pipeline | Mỗi model một InferenceService | Ghép RAG, rerank và LLM trong một app Python |
-| Độ phức tạp vận hành | Thấp hơn | Cao hơn (Ray head, GCS) |
+- Ngày 30/10, 09:24:46–09:31:13. Bắt đầu từ 1 replica (node `ubuntu`).
+- 100 luồng chạy trên node server, mỗi luồng gửi liên tục `POST /v1/chat/completions` qua gateway, prompt ngắn (~20 token), `max_tokens 256`, mỗi request một kết nối mới. Tất cả dùng chung một API key.
+- Ảnh chụp từ Grafana, khung thời gian 09:23:16–09:33:13.
 
-**Quyết định:** làm **nhánh A trước** vì bám sát sách và ít phần phải tự viết. Nhánh B chỉ thêm khi xuất hiện nhu cầu pipeline. Hai nhánh dùng chung Prometheus, Loki, Grafana và node pool GPU.
+### 5.2. Kết quả
 
-## Cấu trúc thư mục
-
-```
-GPU-autoscaling-LLM/
-├── README.md
-├── docs/
-│   ├── architecture.html           # Tài liệu kiến trúc có sơ đồ
-│   ├── adr/                        # Architecture Decision Records
-│   └── runbooks/                   # Hướng dẫn xử lý sự cố
-│
-├── infra/terraform/                # Hạ tầng cloud
-│   ├── modules/
-│   │   ├── cluster/                # Kubernetes cluster
-│   │   ├── gpu-nodepool/           # Node pool GPU (on-demand, spot)
-│   │   ├── storage/                # S3/GCS: model weights, Loki, Tempo
-│   │   └── iam/                    # Role, service account
-│   └── envs/{dev,prod}/
-│
-├── clusters/{dev,prod}/            # Argo CD app-of-apps cho từng môi trường
-│
-├── platform/                       # Helm values để cài các operator / add-on
-│   ├── gpu-operator/
-│   ├── keda/
-│   ├── karpenter/
-│   ├── kube-prometheus-stack/      # Prometheus + Alertmanager + Grafana
-│   ├── loki/
-│   ├── alloy/
-│   ├── tempo/
-│   ├── opencost/
-│   ├── kserve/
-│   ├── envoy-ai-gateway/
-│   └── kuberay/
-│
-├── serving/                        # LLM Serving
-│   ├── gateway/                    # Gateway, route, rate-limit, authN
-│   ├── kserve/
-│   │   ├── runtimes/               # ServingRuntime cho vLLM
-│   │   ├── model-cache/            # LocalModelCache, LocalModelNodeGroup
-│   │   └── models/llama3-8b/       # InferenceService theo từng model
-│   ├── rayserve/                   # RayService + app Python (nhánh B)
-│   ├── images/vllm/                # Dockerfile tùy biến (nếu cần)
-│   └── models/                     # Script đồng bộ weights lên model store
-│
-├── autoscaling/
-│   ├── nodepools/                  # Karpenter NodePool / EC2NodeClass
-│   ├── placeholder/                # PriorityClass + pod giữ chỗ GPU
-│   ├── scaledobjects/              # KEDA ScaledObject (khi tự quản lý Deployment)
-│   └── pdb/                        # PodDisruptionBudget
-│
-├── observability/
-│   ├── monitors/                   # ServiceMonitor / PodMonitor
-│   ├── rules/
-│   │   ├── recording/              # Tín hiệu scale đã tính sẵn
-│   │   └── alerts/                 # Cảnh báo SLO, replica chạm trần
-│   ├── alertmanager/               # Routing tới Slack / PagerDuty
-│   └── dashboards/                 # Grafana dashboard (JSON)
-│
-├── loadtest/
-│   ├── scenarios/                  # Kịch bản tải nền, đỉnh, burst
-│   └── results/                    # Kết quả dùng để chọn threshold
-│
-└── .github/workflows/              # CI: lint manifest, build image
-```
-
-Nguyên tắc: `platform/` chỉ chứa phần **cài đặt** operator (Helm values). Các tài nguyên riêng của dự án (InferenceService, NodePool, rules, dashboard) nằm trong thư mục theo chức năng. Argo CD ở `clusters/<env>/` trỏ tới các thư mục này.
-
-## Quy ước chung
-
-| Mục | Quy ước |
+| Chỉ số | Giá trị |
 |---|---|
-| Namespace | `llm-serving`, `monitoring`, `keda`, `karpenter`, `gpu-operator`, `kserve` |
-| Label bắt buộc trên pod model | `model=<tên-model>`, dùng chung cho PromQL, LogQL và dashboard |
-| Label log trong Loki | Chỉ dùng `namespace`, `pod`, `model`, `container` (tránh label có cardinality cao) |
-| Node GPU | Taint `nvidia.com/gpu=present:NoSchedule`; chỉ pod serving mới có toleration |
-| Thay đổi cluster | Chỉ đi qua Git và Argo CD, không `kubectl apply` thủ công trên prod |
-| Quyết định kiến trúc | Ghi một ADR trong `docs/adr/` |
+| Request thành công (200) | 2.373 |
+| Bị rate limit (429) | 82.900 |
+| Lỗi kết nối phía client (curl `000`) | 10.029 |
+| KEDA quyết định lên 2 replica | 09:25:02, 16 s sau khi có tải |
+| Pod thứ 2 Ready | ~09:26:15, khoảng 1 phút 30 s sau quyết định scale |
+| Throughput sinh token đỉnh | ~1.600 tok/s (2 replica) |
+| TTFT p95 | ~4,6 s khi 1 replica; giảm dần còn ~1,5 s sau khi có 2 replica và tải giảm |
 
-## Lộ trình
+Con số 429 và lỗi kết nối không phải lỗi của hệ thống mà do cách bắn tải:
 
-1. **Nền tảng**: cluster, node pool GPU, Argo CD, GPU Operator, Prometheus.
-2. **Serving cơ bản**: KServe + vLLM chạy một model, gọi được API OpenAI, Prometheus scrape được metrics.
-3. **Gateway và cold start**: Envoy AI Gateway, LocalModelCache, probe, graceful shutdown.
-4. **Load test**: đo số request mỗi replica giữ được SLO TTFT, từ đó chốt threshold.
-5. **Autoscaling**: KEDA + HPA theo hàng đợi vLLM, Karpenter cho node GPU, pod placeholder, PDB.
-6. **Observability đầy đủ**: Loki + Alloy, dashboard, cảnh báo SLO, OpenCost.
-7. **Mở rộng (tùy chọn)**: Tempo tracing, Ray Serve cho pipeline, Thanos/Mimir.
+- 2 replica sinh ~1.600 tok/s, tức ~96k token đầu ra mỗi phút, cộng token đầu vào thì vượt hạn mức 100k token/phút của một key. Từ 09:27:57 gateway bắt đầu trả 429, đúng như cấu hình.
+- Vòng lặp tải không có backoff: nhận 429 là gửi lại ngay, nên số request bị chặn lên tới ~300 req/s. Lỗi `000` xuất hiện cùng lúc, nhiều khả năng do hết cổng TCP tạm phía máy bắn tải (mỗi request mở một kết nối mới); chưa kiểm chứng.
 
-## Điểm dễ sai khi chạy thật
+Để đo sức chứa thật cần chia tải cho nhiều key hoặc dùng key có hạn mức riêng cho load test.
 
-- **Cold start dài**: image nặng vài GB, weights hàng chục GB, cộng thời gian khởi tạo CUDA. Khắc phục bằng pre-pull image, LocalModelCache trên NVMe, pod placeholder ưu tiên thấp và `startupProbe` đủ dài.
-- **Scale down làm rớt request**: đặt `terminationGracePeriodSeconds` lớn hơn request dài nhất, thêm `preStop` để drain, và dùng PodDisruptionBudget.
-- **Flapping**: dùng giá trị trung bình theo thời gian, stabilization window khi scale-down phải dài hơn thời gian khởi động, và xóa từng pod một.
-- **CPU/RAM nghẽn trước GPU**: tokenizer và lớp API cần đủ CPU và RAM. Nếu thiếu, GPU không bao giờ đạt ngưỡng nên hệ thống không scale.
-- **Scale-to-zero**: không áp dụng cho production; chỉ dùng cho dev hoặc job theo hàng đợi.
-- **Quota và chi phí**: `maxReplicas` phải nằm trong quota GPU. Đặt cảnh báo khi replica chạm trần để phân biệt đỉnh tải thật với tấn công.
+### 5.3. Autoscaling Overview
 
-## Tài liệu tham khảo
+![Autoscaling Overview](docs/images/grafana-autoscaling-overview.png)
 
-- [vLLM](https://docs.vllm.ai) · [KServe](https://kserve.github.io/website/) · [KEDA](https://keda.sh) · [Karpenter](https://karpenter.sh)
-- [NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/) · [DCGM exporter](https://github.com/NVIDIA/dcgm-exporter)
-- [Envoy AI Gateway](https://aigateway.envoyproxy.io) · [KubeRay](https://docs.ray.io/en/latest/cluster/kubernetes/)
-- [Grafana Alloy](https://grafana.com/docs/alloy/) · [Loki](https://grafana.com/docs/loki/) · [Tempo](https://grafana.com/docs/tempo/) · [OpenCost](https://opencost.io)
+- Concurrency lên ~100 ngay khi bắt đầu. Pod `6kxm7` (node `ubuntu`) một mình chạy 95–100 request, KV cache chạm 99% và có tới 20 request phải chờ.
+- Pod `9qtps` (node server) Ready lúc ~09:26:15 nhưng nhận tải chậm: 3 phút đầu chỉ 5–30 request, trong khi pod cũ vẫn 70–90. Đến ~09:29 hai pod mới cân bằng (~50 mỗi bên). Lý do: các kết nối Envoy → vLLM đang phục vụ request dài thì không đóng, nên chỉ khi chúng kết thúc thì kết nối mới mới có cơ hội rơi vào pod mới. Ở tải 4 hoặc 30 request, hiện tượng này gần như không thấy.
+- Sau khi có pod thứ 2, không còn request phải chờ.
+
+### 5.4. LLM Serving Overview
+
+![LLM Serving Overview](docs/images/grafana-llm-serving-overview.png)
+
+- TTFT p95 tăng lên ~4,6 s trong lúc chỉ có 1 replica, vượt SLO 2 s. Đây là khoảng trống khi chờ pod mới (~1,5 phút) cộng thời gian pod mới bắt đầu nhận tải.
+- Inter-token latency p95 lên ~120 ms khi 100 request cùng decode trên 1 GPU, về ~75 ms khi tải chia ra.
+- Throughput tăng dần tới ~1.600 tok/s. Đường này là trung bình trượt 5 phút nên tăng chậm hơn thực tế.
+
+### 5.5. GPU Overview
+
+![GPU Overview](docs/images/grafana-gpu-overview.png)
+
+- `GPU_UTIL` lên 100% ngay khi có tải và giữ nguyên dù số request trên mỗi GPU thay đổi từ 30 tới 100. Đây là lý do không dùng metric này để scale.
+- Công suất 150–170 W mỗi GPU khi có tải, ~15–20 W khi rảnh.
+- Nhiệt độ GPU node server lên ~88 °C, node `ubuntu` ~80 °C.
+- VRAM ~9 GB mỗi GPU, không đổi theo tải vì vLLM cấp phát trước.
+- Không có lỗi XID.
+
+### 5.6. Gateway Overview
+
+![Gateway Overview](docs/images/grafana-gateway-overview.png)
+
+- Trước 09:28 gần như toàn bộ request là 2xx, nhưng số request/giây thấp vì mỗi request mất vài chục giây (p95 30–47 s, chủ yếu là thời gian sinh 256 token khi GPU bận).
+- Từ 09:28, 4xx (429) và rate-limit events tăng dần tới ~300–400/s, cho thấy rate limit theo token hoạt động. Độ trễ p95 tụt về gần 0 vì phần lớn request bị chặn ngay tại gateway.
+- Không có 5xx.
+
+## 6. Tài liệu liên quan
+
+- Triển khai từ đầu: `docs/runbooks/deploy-from-scratch.md`
+- Model trên nhiều node: `docs/runbooks/model-on-nodes.md`
+- Gateway: `docs/runbooks/gateway.md`, `docs/specs/gateway.md`
+- Observability: `docs/runbooks/observability.md`, `docs/specs/observability.md`
+- Autoscale: `docs/runbooks/autoscaling.md`, `docs/adr/0002-autoscaling.md`
+- Kết quả đo: `loadtest/results/`

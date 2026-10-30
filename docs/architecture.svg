@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="840" viewBox="0 0 1200 840" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b5651d"/>
+    </marker>
+    <marker id="k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7b3fa0"/>
+    </marker>
+  </defs>
+  <style>
+    .box{fill:#fff;stroke:#555;stroke-width:1.2}
+    .gw{fill:#e8f1fb;stroke:#2f6db5}
+    .pod{fill:#eaf6ea;stroke:#3a8a3a}
+    .obs{fill:#fdf3e7;stroke:#b5651d}
+    .ks{fill:#f4ecf8;stroke:#7b3fa0}
+    .ext{fill:#f5f5f5;stroke:#888}
+    .t{font-weight:600}
+    .s{font-size:11.5px;fill:#444}
+    .flow{stroke:#444;stroke-width:1.4;fill:none;marker-end:url(#a)}
+    .scrape{stroke:#b5651d;stroke-width:1.2;fill:none;stroke-dasharray:5 4;marker-end:url(#m)}
+    .scale{stroke:#7b3fa0;stroke-width:1.6;fill:none;marker-end:url(#k)}
+  </style>
+
+  <!-- Bên ngoài cụm -->
+  <rect class="box ext" x="70" y="20" width="250" height="50" rx="6"/>
+  <text x="195" y="41" text-anchor="middle" class="t">Client API</text>
+  <text x="195" y="58" text-anchor="middle" class="s">OpenAI SDK, curl · Bearer key riêng</text>
+
+  <rect class="box ext" x="390" y="20" width="200" height="50" rx="6"/>
+  <text x="490" y="41" text-anchor="middle" class="t">Trình duyệt</text>
+  <text x="490" y="58" text-anchor="middle" class="s">tài khoản Open WebUI</text>
+
+  <rect class="box ext" x="70" y="105" width="250" height="44" rx="6"/>
+  <text x="195" y="124" text-anchor="middle" class="t">Cloudflare quick tunnel</text>
+  <text x="195" y="140" text-anchor="middle" class="s">*.trycloudflare.com (API)</text>
+
+  <rect class="box ext" x="390" y="105" width="200" height="44" rx="6"/>
+  <text x="490" y="124" text-anchor="middle" class="t">Cloudflare quick tunnel</text>
+  <text x="490" y="140" text-anchor="middle" class="s">*.trycloudflare.com (Web)</text>
+
+  <path class="flow" d="M195,70 V105"/>
+  <path class="flow" d="M490,70 V105"/>
+
+  <!-- Cụm -->
+  <rect x="20" y="180" width="1160" height="645" rx="10" fill="none" stroke="#333" stroke-width="1.6" stroke-dasharray="8 5"/>
+  <text x="36" y="202" class="t">Cụm k3s v1.36 · 2 node cùng LAN 192.168.1.0/24 · quản trị từ xa qua Tailscale</text>
+
+  <!-- Open WebUI -->
+  <rect class="box gw" x="390" y="225" width="200" height="50" rx="6"/>
+  <text x="490" y="246" text-anchor="middle" class="t">Open WebUI v0.12</text>
+  <text x="490" y="263" text-anchor="middle" class="s">dùng chung key "open-webui"</text>
+  <path class="flow" d="M490,149 V225"/>
+
+  <!-- Gateway -->
+  <rect class="box gw" x="60" y="300" width="270" height="86" rx="6"/>
+  <text x="195" y="322" text-anchor="middle" class="t">Envoy Gateway + AI Gateway</text>
+  <text x="195" y="341" text-anchor="middle" class="s">xác thực API key · đọc "model" trong body</text>
+  <text x="195" y="357" text-anchor="middle" class="s">rate limit 100k token/phút/key</text>
+  <text x="195" y="373" text-anchor="middle" class="s">timeout 300 s · access log JSON</text>
+  <path class="flow" d="M195,149 V300"/>
+  <path class="flow" d="M490,275 V300 Q490,320 330,330"/>
+
+  <rect class="box gw" x="60" y="410" width="120" height="40" rx="6"/>
+  <text x="120" y="435" text-anchor="middle" class="t">Redis</text>
+  <path class="flow" d="M120,386 V410"/>
+  <text x="128" y="400" class="s">đếm token</text>
+
+  <rect class="box gw" x="200" y="410" width="130" height="40" rx="6"/>
+  <text x="265" y="428" text-anchor="middle" class="t">Service</text>
+  <text x="265" y="443" text-anchor="middle" class="s">llama31-8b-predictor</text>
+  <path class="flow" d="M265,386 V410"/>
+
+  <!-- Node 1 -->
+  <rect class="box" x="40" y="520" width="370" height="285" rx="8" fill="#fafafa"/>
+  <text x="56" y="542" class="t">Node 1 · s12gbn3 (control-plane)</text>
+  <text x="56" y="559" class="s">i7-12700 · 31 GB RAM · RTX 3060 12 GB · driver 595</text>
+  <rect class="box pod" x="56" y="575" width="338" height="96" rx="6"/>
+  <text x="225" y="596" text-anchor="middle" class="t">Pod vLLM 0.31 (KServe Standard)</text>
+  <text x="225" y="614" text-anchor="middle" class="s">Llama-3.1-8B-Instruct AWQ INT4 · max-model-len 16384</text>
+  <text x="225" y="630" text-anchor="middle" class="s">KV cache 18.400 token · gpu-mem-util 0.80</text>
+  <text x="225" y="646" text-anchor="middle" class="s">preStop 15 s · shutdown-timeout 90 s</text>
+  <text x="225" y="662" text-anchor="middle" class="s">+ sidecar agent của KServe</text>
+  <rect class="box" x="56" y="685" width="160" height="44" rx="6"/>
+  <text x="136" y="703" text-anchor="middle" class="t">hostPath (ro)</text>
+  <text x="136" y="719" text-anchor="middle" class="s">/opt/models/llama31-8b</text>
+  <rect class="box" x="234" y="685" width="160" height="44" rx="6"/>
+  <text x="314" y="703" text-anchor="middle" class="t">dcgm-exporter</text>
+  <text x="314" y="719" text-anchor="middle" class="s">GPU Operator v26.7</text>
+  <path class="flow" d="M136,685 V671"/>
+  <text x="56" y="752" class="s">Cũng chạy: KServe controller, cert-manager, gateway,</text>
+  <text x="56" y="768" class="s">Redis, cloudflared, Open WebUI, KEDA</text>
+  <text x="56" y="790" class="s">Image vLLM được ghim (không bị kubelet dọn)</text>
+
+  <!-- Node 2 -->
+  <rect class="box" x="430" y="520" width="370" height="285" rx="8" fill="#fafafa"/>
+  <text x="446" y="542" class="t">Node 2 · ubuntu (worker)</text>
+  <text x="446" y="559" class="s">i5-12400F · 31 GB RAM · RTX 3060 12 GB · driver 595</text>
+  <rect class="box pod" x="446" y="575" width="338" height="96" rx="6"/>
+  <text x="615" y="596" text-anchor="middle" class="t">Pod vLLM 0.31 (KServe Standard)</text>
+  <text x="615" y="614" text-anchor="middle" class="s">cùng model, cùng tham số với Node 1</text>
+  <text x="615" y="630" text-anchor="middle" class="s">KEDA bật/tắt pod theo tải</text>
+  <text x="615" y="646" text-anchor="middle" class="s">Deployment tự chọn pod bị xoá khi scale xuống</text>
+  <rect class="box" x="446" y="685" width="160" height="44" rx="6"/>
+  <text x="526" y="703" text-anchor="middle" class="t">hostPath (ro)</text>
+  <text x="526" y="719" text-anchor="middle" class="s">/opt/models/llama31-8b</text>
+  <rect class="box" x="624" y="685" width="160" height="44" rx="6"/>
+  <text x="704" y="703" text-anchor="middle" class="t">dcgm-exporter</text>
+  <text x="704" y="719" text-anchor="middle" class="s">GPU Operator v26.7</text>
+  <path class="flow" d="M526,685 V671"/>
+  <text x="446" y="752" class="s">Cũng chạy: Prometheus, Loki (PVC local-path)</text>
+  <text x="446" y="790" class="s">Model chép tay bằng rsync, kiểm tra SHA256SUMS</text>
+
+  <!-- Service -> pods -->
+  <path class="flow" d="M265,450 V495 H225 V575"/>
+  <path class="flow" d="M265,450 V495 H615 V575"/>
+  <text x="280" y="488" class="s">kube-proxy chọn pod theo kết nối</text>
+
+  <!-- Observability -->
+  <rect class="box obs" x="830" y="225" width="330" height="190" rx="8"/>
+  <text x="845" y="247" class="t">Observability (namespace monitoring)</text>
+  <rect class="box" x="845" y="260" width="145" height="44" rx="5"/>
+  <text x="917" y="279" text-anchor="middle" class="t">Prometheus</text>
+  <text x="917" y="295" text-anchor="middle" class="s">scrape 15 s · giữ 7 ngày</text>
+  <rect class="box" x="1000" y="260" width="145" height="44" rx="5"/>
+  <text x="1072" y="279" text-anchor="middle" class="t">Grafana</text>
+  <text x="1072" y="295" text-anchor="middle" class="s">4 dashboard từ git</text>
+  <rect class="box" x="845" y="314" width="145" height="44" rx="5"/>
+  <text x="917" y="333" text-anchor="middle" class="t">Alertmanager</text>
+  <text x="917" y="349" text-anchor="middle" class="s">rule: vLLM, GPU, gateway</text>
+  <rect class="box" x="1000" y="314" width="145" height="44" rx="5"/>
+  <text x="1072" y="333" text-anchor="middle" class="t">Loki</text>
+  <text x="1072" y="349" text-anchor="middle" class="s">Alloy đang tạm tắt</text>
+  <text x="845" y="378" class="s">Recording rule: concurrency, TTFT p50/p95,</text>
+  <text x="845" y="394" class="s">ITL p95, tok/s, request/lỗi tại gateway</text>
+  <path class="flow" d="M990,282 H1000"/>
+
+  <!-- Scrape -->
+  <path class="scrape" d="M394,600 C560,470 740,330 845,288"/>
+  <path class="scrape" d="M784,600 C812,470 800,330 845,296"/>
+  <path class="scrape" d="M330,322 C560,290 720,280 845,278"/>
+  <text x="470" y="470" class="s" fill="#b5651d">/metrics: vLLM :8000, DCGM :9400, Envoy</text>
+
+  <!-- KEDA -->
+  <rect class="box ks" x="830" y="445" width="330" height="96" rx="8"/>
+  <text x="995" y="466" text-anchor="middle" class="t">KEDA 2.21 · ScaledObject llama31-8b</text>
+  <text x="995" y="484" text-anchor="middle" class="s">concurrency (running + waiting) ≥ 4/replica</text>
+  <text x="995" y="500" text-anchor="middle" class="s">hoặc avg KV cache ≥ 0,8 → HPA, replica 1 ↔ 2</text>
+  <text x="995" y="516" text-anchor="middle" class="s">lên ngay · xuống sau 600 s · fallback 2</text>
+  <text x="995" y="532" text-anchor="middle" class="s">KServe autoscalerClass: external</text>
+  <path class="scrape" d="M838,304 V445"/>
+  <text x="790" y="430" class="s" fill="#b5651d">PromQL</text>
+    <path class="scale" d="M995,541 V560 Q995,575 800,600"/>
+  <text x="815" y="585" class="s" fill="#7b3fa0">replicas</text>
+
+  <!-- Chú thích -->
+  <rect x="830" y="640" width="330" height="110" rx="6" fill="#fff" stroke="#bbb"/>
+  <text x="845" y="662" class="t">Chú thích</text>
+  <path class="flow" d="M845,682 H885"/><text x="895" y="686" class="s">luồng request</text>
+  <path class="scrape" d="M845,704 H885"/><text x="895" y="708" class="s">thu metric / truy vấn Prometheus</text>
+  <path class="scale" d="M845,726 H885"/><text x="895" y="730" class="s">điều khiển số replica</text>
+</svg>
