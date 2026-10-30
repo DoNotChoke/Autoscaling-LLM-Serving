@@ -28,10 +28,10 @@ Cập nhật: 30/10/2026
 
 | Node | Vai trò | CPU / RAM | GPU | Ổ đĩa |
 |---|---|---|---|---|
-| `s12gbn3-system-product-name` (192.168.1.147) | control-plane + GPU | i7-12700 / 31 GB | RTX 3060 12 GB, driver 595.99 | 457 GB, đang dùng ~83% |
-| `ubuntu` (192.168.1.129) | worker GPU | i5-12400F / 31 GB | RTX 3060 12 GB, driver 595.91 | 233 GB, dùng 40% |
+| node-1 | control-plane + GPU | i7-12700 / 31 GB | RTX 3060 12 GB, driver 595.99 | 457 GB, đang dùng ~83% |
+| node-2 | worker GPU | i5-12400F / 31 GB | RTX 3060 12 GB, driver 595.91 | 233 GB, dùng 40% |
 
-Hai máy cùng LAN; k3s nói chuyện qua LAN, Tailscale chỉ dùng để quản trị từ xa. Máy server dùng chung với chủ máy (có LiteLLM, Docker, giao diện đồ hoạ).
+Hai máy cùng LAN; k3s nói chuyện qua LAN, Tailscale chỉ dùng để quản trị từ xa. node-1 dùng chung với chủ máy (có LiteLLM, Docker, giao diện đồ hoạ).
 
 ## 3. Đã làm theo từng phần
 
@@ -40,13 +40,13 @@ Hai máy cùng LAN; k3s nói chuyện qua LAN, Tailscale chỉ dùng để quả
 - Script `infra/node/prepare-gpu-node.sh` (cài toolkit, kiểm tra driver và dung lượng đĩa) và `install-k3s.sh` (có thêm chế độ agent để join node thứ 2).
 - containerd của k3s dùng `nvidia` làm runtime mặc định, pod GPU không cần `runtimeClassName`.
 - GPU Operator chỉ bật device plugin, GPU feature discovery và dcgm-exporter; driver và toolkit cài sẵn trên host.
-- Giữ cố định gói kernel và module NVIDIA bằng `apt-mark hold` trên máy server, sau sự cố driver ở mục 5.
+- Giữ cố định gói kernel và module NVIDIA bằng `apt-mark hold` trên node-1, sau khi một lần kernel tự nâng cấp làm mất module NVIDIA.
 
 ### 3.2. Model và serving
 
 - Phiên bản đầu chạy trên VM RTX 4090 24 GB với bản BF16, model tải bằng Job vào PVC `local-path`. Khi chuyển sang RTX 3060 thì BF16 (15 GB) không vừa, đổi sang AWQ INT4 (5,4 GB). vLLM tự nhận AWQ và dùng kernel Marlin.
 - PVC `local-path` chỉ gắn được vào một node, nên khi có 2 node, model được chép sẵn vào cùng đường dẫn trên mỗi node và mount `hostPath` chỉ đọc (`docs/runbooks/model-on-nodes.md`). Node có model mới được gắn nhãn `llm-serving/model-llama31-8b=true`.
-- Tham số vLLM: `max-model-len 16384`, `gpu-memory-utilization 0.80` (chừa VRAM cho giao diện đồ hoạ trên máy server), tool calling cho Open WebUI (`llama3_json`).
+- Tham số vLLM: `max-model-len 16384`, `gpu-memory-utilization 0.80` (chừa VRAM cho giao diện đồ hoạ trên node-1), tool calling cho Open WebUI (`llama3_json`).
 - KV cache mỗi replica: 18.400 token, đủ một request 16K.
 - Vòng đời pod: startup probe tối đa 10 phút, `preStop` 15 s, `--shutdown-timeout=90`, `terminationGracePeriodSeconds 120`, nên tắt pod không làm đứt request đang stream.
 - RollingUpdate `maxSurge 0, maxUnavailable 1` (không có GPU thứ 3) và PDB `minAvailable 1`.
@@ -117,8 +117,8 @@ Với SLO TTFT p95 ≤ 2 s, một replica giữ được 6 request song song. Ng
 
 ### 5.1. Cách làm
 
-- Ngày 30/10, 09:24:46–09:31:13. Bắt đầu từ 1 replica (node `ubuntu`).
-- 100 luồng chạy trên node server, mỗi luồng gửi liên tục `POST /v1/chat/completions` qua gateway, prompt ngắn (~20 token), `max_tokens 256`, mỗi request một kết nối mới. Tất cả dùng chung một API key.
+- Ngày 30/10, 09:24:46–09:31:13. Bắt đầu từ 1 replica (node-2).
+- 100 luồng chạy trên node-1, mỗi luồng gửi liên tục `POST /v1/chat/completions` qua gateway, prompt ngắn (~20 token), `max_tokens 256`, mỗi request một kết nối mới. Tất cả dùng chung một API key.
 - Ảnh chụp từ Grafana, khung thời gian 09:23:16–09:33:13.
 
 ### 5.2. Kết quả
@@ -144,8 +144,8 @@ Con số 429 và lỗi kết nối không phải lỗi của hệ thống mà do
 
 ![Autoscaling Overview](docs/images/grafana-autoscaling-overview.png)
 
-- Concurrency lên ~100 ngay khi bắt đầu. Pod `6kxm7` (node `ubuntu`) một mình chạy 95–100 request, KV cache chạm 99% và có tới 20 request phải chờ.
-- Pod `9qtps` (node server) Ready lúc ~09:26:15 nhưng nhận tải chậm: 3 phút đầu chỉ 5–30 request, trong khi pod cũ vẫn 70–90. Đến ~09:29 hai pod mới cân bằng (~50 mỗi bên). Lý do: các kết nối Envoy → vLLM đang phục vụ request dài thì không đóng, nên chỉ khi chúng kết thúc thì kết nối mới mới có cơ hội rơi vào pod mới. Ở tải 4 hoặc 30 request, hiện tượng này gần như không thấy.
+- Concurrency lên ~100 ngay khi bắt đầu. Pod `6kxm7` (node-2) một mình chạy 95–100 request, KV cache chạm 99% và có tới 20 request phải chờ.
+- Pod `9qtps` (node-1) Ready lúc ~09:26:15 nhưng nhận tải chậm: 3 phút đầu chỉ 5–30 request, trong khi pod cũ vẫn 70–90. Đến ~09:29 hai pod mới cân bằng (~50 mỗi bên). Lý do: các kết nối Envoy → vLLM đang phục vụ request dài thì không đóng, nên chỉ khi chúng kết thúc thì kết nối mới mới có cơ hội rơi vào pod mới. Ở tải 4 hoặc 30 request, hiện tượng này gần như không thấy.
 - Sau khi có pod thứ 2, không còn request phải chờ.
 
 ### 5.4. LLM Serving Overview
@@ -162,7 +162,7 @@ Con số 429 và lỗi kết nối không phải lỗi của hệ thống mà do
 
 - `GPU_UTIL` lên 100% ngay khi có tải và giữ nguyên dù số request trên mỗi GPU thay đổi từ 30 tới 100. Đây là lý do không dùng metric này để scale.
 - Công suất 150–170 W mỗi GPU khi có tải, ~15–20 W khi rảnh.
-- Nhiệt độ GPU node server lên ~88 °C, node `ubuntu` ~80 °C.
+- Nhiệt độ GPU node-1 lên ~88 °C, node-2 ~80 °C.
 - VRAM ~9 GB mỗi GPU, không đổi theo tải vì vLLM cấp phát trước.
 - Không có lỗi XID.
 
