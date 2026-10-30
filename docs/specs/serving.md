@@ -247,7 +247,7 @@ spec:
 |---|---|
 | LT-1 | Load test chạy dưới dạng Job trong namespace `llm-loadtest`, dùng `vllm bench serve` với bộ prompt cố định (input khoảng 512 token, output khoảng 256 token, cộng một biến thể prompt dài). |
 | LT-2 | **baseline**: 1 replica, quét `--max-concurrency` 1, 2, 4, 8, 16, 32. Ghi lại throughput (tok/s), TTFT p50/p95, ITL p95 và tỷ lệ lỗi. |
-| LT-3 | Chọn **threshold** = mức concurrency cao nhất mà vẫn đạt **TTFT p95 ≤ 1s** và **lỗi < 1%**. Ghi vào `loadtest/results/README.md`. |
+| LT-3 | Chọn **threshold** = mức concurrency cao nhất mà vẫn đạt **TTFT p95 ≤ 2s** và **lỗi < 1%**. Ghi vào `loadtest/results/README.md`. |
 | LT-4 | **ramp**: tải tăng dần vượt threshold của 1 replica trong 10 phút, sau đó giảm. Dùng để kiểm chứng scale 1 → 2 → 1 khi autoscaling đã bật. |
 | LT-5 | Mỗi lần chạy ghi đủ phiên bản vLLM, model, GPU và tham số vào file kết quả, để có thể chạy lại và so sánh. |
 | LT-6 | Mặc định gọi qua gateway. Có tùy chọn gọi thẳng Service để tách độ trễ do gateway gây ra. |
@@ -319,7 +319,7 @@ Không đặt mục tiêu coverage, vì phần này chủ yếu là cấu hình.
 1. `smoke.sh` pass toàn bộ qua gateway: stream, 401, 404, 429.
 2. `/metrics` của mỗi pod vLLM có đủ 4 metric trong hợp đồng, và Prometheus scrape được (xác nhận cùng phần observability).
 3. Cold start với weights đã cache ≤ 3 phút. Không phát sinh lỗi khi scale-down trong lúc có tải.
-4. `loadtest/results/README.md` có bảng baseline và threshold đã chốt theo SLO TTFT p95 ≤ 1s.
+4. `loadtest/results/README.md` có bảng baseline và threshold đã chốt theo SLO TTFT p95 ≤ 2s.
 5. Ở kịch bản ramp, khi autoscaling bật: 1 → 2 → 1 replica, lỗi < 1%.
 6. Có ADR cho quyết định runtime (vLLM image thay vì huggingfaceserver) và quyết định chọn bản model (BF16 hay AWQ).
 
@@ -329,7 +329,7 @@ Không đặt mục tiêu coverage, vì phần này chủ yếu là cấu hình.
 
 1. ~~Model GPU của lab~~: đã chốt RTX 4090 24 GB (Vast VM). Còn mở: GPU của máy on-prem thứ 2, vì nếu chỉ có 16 GB thì phải chuyển sang AWQ.
 2. Nếu phải dùng AWQ: lấy bản cộng đồng (`hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4`) hay tự lượng tử hoá?
-3. **SLO**: TTFT p95 ≤ 1s và lỗi < 1% đã phù hợp chưa?
+3. ~~**SLO**: TTFT p95 ≤ 1s và lỗi < 1% đã phù hợp chưa?~~ Nới thành TTFT p95 ≤ 2s (2026-10-28): với 1s, một 3060 chỉ giữ được 2 request (ADR 0002 mục 3).
 4. **Mức giới hạn token** mặc định mỗi client: 100k token/phút có hợp lý không?
 5. Hai máy **chỉ làm worker** hay một máy kiêm luôn control plane? Nếu kiêm, cần chừa CPU và RAM cho control plane khi đặt `requests`.
 6. **Truy cập từ ngoài**: chỉ trong LAN (NodePort) hay cần domain và TLS?

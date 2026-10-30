@@ -35,8 +35,8 @@ spec:
       metadata:
         serverAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
         query: sum(llm_serving:vllm_concurrency:sum{namespace="llm-serving", model_name="llama31-8b"}) or vector(0)
-        # Tạm theo SLO TTFT p95 1s: 1 replica giữ được ~2 request (loadtest/results/2026-10-24-baseline-1-replica)
-        threshold: "2"
+        # SLO TTFT p95 ≤ 2s: 1 replica giữ được 6 request, target 0,75 × 6 ≈ 4 (loadtest/results/2026-10-28-capacity-c4-c8)
+        threshold: "4"
     # Ít request nhưng prompt dài vẫn có thể làm đầy KV cache
     - type: prometheus
       name: kvcache

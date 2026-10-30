@@ -1,6 +1,6 @@
 # ADR-0002: Autoscale vLLM 1 ↔ 2 replica bằng KEDA theo metric vLLM
 
-- Trạng thái: **Nháp**. SLO đang để tạm 1 s, chờ kết quả S1–S6 để chốt
+- Trạng thái: **Nháp**. SLO TTFT p95 ≤ 2 s (nới từ 1 s ngày 2026-10-28), chờ kết quả S1–S6 để chốt
 - Ngày: 2026-10-24
 
 ## Bối cảnh
@@ -28,7 +28,7 @@ ScaledObject ở `autoscaling/scaledobjects/llama31-8b.yaml`, trỏ vào Deploym
 
 | Trigger | PromQL | Kiểu | Target |
 |---|---|---|---|
-| `concurrency` (chính) | `llm_serving:vllm_concurrency:sum` (recording rule = running + waiting) | `AverageValue` | **2** (tạm, xem mục 3) |
+| `concurrency` (chính) | `llm_serving:vllm_concurrency:sum` (recording rule = running + waiting) | `AverageValue` | **4** (xem mục 3) |
 | `kvcache` (phụ) | `avg(vllm:kv_cache_usage_perc)` | `Value` | 0,8 |
 
 - **Không dùng `DCGM_FI_DEV_GPU_UTIL`**: lên ~100% chỉ với 1 request (mỗi bước decode đọc toàn bộ weights), và vẫn 100% khi throughput tăng gấp nhiều lần nhờ batching. `FB_USED` luôn cao vì vLLM giữ trước VRAM (`--gpu-memory-utilization`). Scale theo hai metric này thì lên với 1 người dùng và không bao giờ xuống.
@@ -48,9 +48,19 @@ Baseline 1 replica, gọi thẳng vLLM, 512 token vào / 256 token ra (`loadtest
 | 16 | 3,90 s | 381 tok/s | 0,67 |
 | 32 | 8,84 s | 340 tok/s | 1,00 |
 
-- **SLO tạm: TTFT p95 ≤ 1 s** (theo SPEC), nên `C_max = 2` và target = **2** request/replica. Nếu nới lên 2 s thì `C_max = 4`, target = 0,75 × 4 = 3.
-- TTFT vượt SLO khi KV cache mới ~20–30%, nên `concurrency` là trigger quyết định; `kvcache` chỉ bắt trường hợp ít request nhưng prompt dài.
-- _Số trên đo gọi thẳng vLLM. Cần đo lại qua gateway trước khi chốt._
+Đo thêm các mức 4–8 (2026-10-28, node `ubuntu`, cùng tham số, 16 request mỗi luồng, 0 lỗi; `loadtest/results/2026-10-28-capacity-c4-c8/`):
+
+| Concurrency | TTFT p50 | TTFT p95 | Throughput | KV cache max | Waiting max |
+|---|---|---|---|---|---|
+| 4 | 1,24 s | 1,25 s | 181 tok/s | 0,17 | 0 |
+| 5 | 1,55 s | 1,56 s | 212 tok/s | 0,20 | 0 |
+| 6 | 1,55 s | 1,86 s | 242 tok/s | 0,25 | 1 |
+| 7 | 1,86 s | 2,16 s | 268 tok/s | 0,29 | 2 |
+| 8 | 1,87 s | 2,18 s | 283 tok/s | 0,33 | 3 |
+
+- **SLO: TTFT p95 ≤ 2 s** (nới từ 1 s: với 1 s thì `C_max = 2`, chỉ vài người dùng đã phải lên 2 replica). `C_max = 6`, target = 0,75 × 6 = 4,5, làm tròn xuống **4** request/replica để còn dư 1 request trong ~2 phút chờ pod mới Ready. Lên 2 replica khi tổng ≥ 5 request.
+- TTFT vượt SLO khi KV cache mới ~30%, nên `concurrency` là trigger quyết định; `kvcache` chỉ bắt trường hợp ít request nhưng prompt dài.
+- _Số trên đo gọi thẳng vLLM, chưa qua gateway._
 
 ### 4. Tham số HPA
 
@@ -72,7 +82,7 @@ Baseline 1 replica, gọi thẳng vLLM, 512 token vào / 256 token ra (`loadtest
 ## Hệ quả
 
 - **Có sửa `serving/`**: annotation `autoscalerClass: external`, strategy RollingUpdate. Apply InferenceService trước để KServe xoá HPA CPU, rồi mới apply ScaledObject (webhook KEDA từ chối nếu Deployment đã có HPA khác).
-- Ngưỡng thấp (2 request/replica) do 3060: chỉ vài người dùng đồng thời đã lên 2 replica.
+- 1 replica 3060 chỉ giữ SLO 2 s tới 6 request song song; 2 replica tới ~12.
 - Khi chỉ có 1 replica, rollout vẫn gây gián đoạn ngắn (pod duy nhất bị tắt trước); PDB chặn drain node đó.
 - Model trên PVC `local-path` chỉ đọc được ở node 1, nên đã chuyển sang bản chép trên mỗi node ở `/opt/models/llama31-8b`, mount `hostPath` (2026-10-27, `docs/runbooks/model-on-nodes.md`). 2 replica chạy trên 2 node, 20 request chia 9/11.
 - _Mở_: gateway trỏ ClusterIP qua `Backend` FQDN, mà ClusterIP chỉ chia tải theo kết nối. S2 cho thấy client giữ kết nối thì pod mới scale lên nhận 0 request (`loadtest/results/2026-10-27-autoscale/`). Envoy cũng giữ kết nối lâu nên cần đo qua gateway; hướng sửa là Service headless để Envoy thấy từng pod và chia theo request.
