@@ -1,0 +1,88 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "llm_serving:vllm_concurrency:sum{namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "running + waiting", "refId": "A"}
+      ],
+      "title": "Total Concurrency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 1, "min": 0, "unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "vllm:kv_cache_usage_perc{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "{{pod}}", "refId": "A"}
+      ],
+      "title": "KV Cache Usage by Pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "vllm:num_requests_running{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "{{pod}}", "refId": "A"}
+      ],
+      "title": "Running Requests by Pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "vllm:num_requests_waiting{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "{{pod}}", "refId": "A"}
+      ],
+      "title": "Waiting Requests by Pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 1, "min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "kube_pod_status_ready{namespace=\"llm-serving\",pod=~\"llama31-8b-predictor-.*\",condition=\"true\"}", "legendFormat": "{{pod}}", "refId": "A"}
+      ],
+      "title": "Predictor Pod Ready",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "sum by (pod) (vllm:num_requests_running{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"} + vllm:num_requests_waiting{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"})", "legendFormat": "{{pod}}", "refId": "A"}
+      ],
+      "title": "Load by Pod",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["autoscaling", "llm-serving", "observability"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "Autoscaling Overview",
+  "uid": "autoscaling-overview",
+  "version": 1
+}

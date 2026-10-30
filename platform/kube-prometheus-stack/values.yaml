@@ -43,6 +43,10 @@ grafana:
     type: ClusterIP
   ingress:
     enabled: false
+  # Image distroless: auto-update plugin trên filesystem read-only làm datasource Prometheus mất đăng ký (No data)
+  grafana.ini:
+    plugins:
+      preinstall_auto_update: false
   admin:
     existingSecret: grafana-admin
     userKey: admin-user

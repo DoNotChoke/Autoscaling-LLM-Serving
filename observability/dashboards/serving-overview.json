@@ -1,0 +1,90 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "vllm:num_requests_running{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "running {{pod}}", "refId": "A"},
+        {"expr": "vllm:num_requests_waiting{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "waiting {{pod}}", "refId": "B"}
+      ],
+      "title": "Running / Waiting by Pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "llm_serving:vllm_concurrency:sum{namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "concurrency", "refId": "A"}
+      ],
+      "title": "Total Concurrency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 1, "min": 0, "unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "vllm:kv_cache_usage_perc{job=\"monitoring/vllm\",namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "{{pod}}", "refId": "A"}
+      ],
+      "title": "KV Cache Usage by Pod",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "llm_serving:vllm_ttft_seconds:p50{namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "p50", "refId": "A"},
+        {"expr": "llm_serving:vllm_ttft_seconds:p95{namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "p95", "refId": "B"}
+      ],
+      "title": "Time to First Token",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "llm_serving:vllm_inter_token_latency_seconds:p95{namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "p95", "refId": "A"}
+      ],
+      "title": "Inter-token Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "llm_serving:vllm_generation_tokens_per_second:rate5m{namespace=\"llm-serving\",model_name=\"llama31-8b\"}", "legendFormat": "tokens/s", "refId": "A"}
+      ],
+      "title": "Generation Throughput",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["llm-serving", "observability"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "LLM Serving Overview",
+  "uid": "llm-serving-overview",
+  "version": 1
+}

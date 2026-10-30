@@ -1,0 +1,66 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "llm_gateway:requests_per_second:rate5m", "legendFormat": "requests/s", "refId": "A"}
+      ],
+      "title": "Gateway Request Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "sum(rate(envoy_http_downstream_rq_xx{job=\"monitoring/llm-gateway-envoy\",envoy_http_conn_manager_prefix=\"http-10080\",envoy_response_code_class=\"2\"}[5m]))", "legendFormat": "2xx", "refId": "A"},
+        {"expr": "llm_gateway:http_4xx_per_second:rate5m", "legendFormat": "4xx", "refId": "B"},
+        {"expr": "llm_gateway:http_5xx_per_second:rate5m", "legendFormat": "5xx", "refId": "C"}
+      ],
+      "title": "Gateway Response Rates",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "sum(rate(ratelimit_service_rate_limit_over_limit{job=\"envoy-ratelimit\"}[5m]))", "legendFormat": "over-limit events/s", "refId": "A"}
+      ],
+      "title": "Rate-limit Events",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(envoy_http_downstream_rq_time_bucket{job=\"monitoring/llm-gateway-envoy\",envoy_http_conn_manager_prefix=\"http-10080\"}[5m])))", "legendFormat": "p95", "refId": "A"}
+      ],
+      "title": "Gateway Request Latency p95",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["gateway", "llm-serving", "observability"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "Gateway Overview",
+  "uid": "gateway-overview",
+  "version": 1
+}

@@ -178,3 +178,22 @@ Thử nghiệm qua port-forward Service `llm-gateway-envoy` bằng key `ratelimi
 **Checkpoint autoscaling đã bàn giao được:** Prometheus URL, tên metric, PromQL, labels thực tế và bằng chứng vLLM thay đổi theo tải. vLLM (1/1), DCGM (2/2) và bốn target Gateway đều `UP`. KEDA/ScaledObject chưa có trên cluster tại lúc kiểm tra, nên phần KEDA metrics thuộc giai đoạn tích hợp sau.
 
 **O2 chưa nghiệm thu toàn bộ:** còn thiếu bằng chứng hai replica vLLM đồng thời. Khi thử `minReplicas=maxReplicas=2`, Pod thứ hai `Pending`; scheduler báo một node thiếu `nvidia.com/gpu`, node còn lại không khớp node affinity của PV `local-path` chứa model. Đã trả InferenceService về `minReplicas=maxReplicas=1`; Pod gốc tiếp tục `Running`, Pod `Pending` đã được xóa. Cluster hiện chỉ có StorageClass `local-path`, nên cần thêm backend RWX, di chuyển model sang PVC mới và xác nhận hai Pod Ready trước khi đánh dấu O2 hoàn tất theo đầy đủ spec.
+
+## 3. Grafana dashboards
+
+Dashboard lưu JSON trong [`observability/dashboards/`](../../observability/dashboards/); `kustomization.yaml` tạo ConfigMap ở namespace `monitoring` với label `grafana_dashboard=1`, sidecar của Grafana tự nạp trong khoảng 1 phút, không cần restart. Datasource Prometheus dùng UID cố định `prometheus`.
+
+```bash
+kubectl apply -k observability/dashboards
+```
+
+| Dashboard | UID | Nội dung chính |
+| --- | --- | --- |
+| LLM Serving Overview | `llm-serving-overview` | running/waiting theo Pod, concurrency, KV cache, TTFT, inter-token latency, throughput |
+| GPU Overview | `gpu-overview` | utilization, VRAM, power, temperature, XID theo GPU/node |
+| Gateway Overview | `gateway-overview` | request/s, 2xx/4xx/5xx rate, rate-limit events và p95 latency |
+| Autoscaling Overview | `autoscaling-overview` | concurrency, KV cache, running/waiting, Pod Ready và load theo Pod |
+
+Thêm dashboard: export JSON từ Grafana (đặt datasource UID `prometheus`), lưu vào thư mục trên, thêm một mục `configMapGenerator` trong `kustomization.yaml` rồi apply. Dashboard tạo trên UI sẽ mất khi Pod Grafana restart (Grafana không có PVC).
+
+Panel hiện `No data` dù Prometheus có series: kiểm tra `grafana.ini.plugins.preinstall_auto_update: false` trong [`platform/kube-prometheus-stack/values.yaml`](../../platform/kube-prometheus-stack/values.yaml). Thiếu dòng này thì image distroless cố auto-update plugin Prometheus trên filesystem read-only và datasource bị `plugin.notRegistered`.
