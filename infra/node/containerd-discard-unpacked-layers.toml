@@ -1,0 +1,7 @@
+# containerd của k3s gộp file này vào config (imports config-v3.toml.d/*.toml). Copy vào
+# /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.d/ trên mọi node rồi restart k3s / k3s-agent.
+# Bỏ layer nén sau khi giải nén: image model chỉ giữ 1 bản trên node thay vì 2 (~5,4 GB thay vì ~10 GB)
+version = 3
+
+[plugins.'io.containerd.cri.v1.images']
+  discard_unpacked_layers = true

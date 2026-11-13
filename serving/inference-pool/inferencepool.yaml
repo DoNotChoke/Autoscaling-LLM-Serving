@@ -1,0 +1,14 @@
+# Nhóm pod vLLM mà EPP chọn theo từng request (thay cho Service ClusterIP chia theo kết nối TCP)
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: llama31-8b
+  labels: { model: llama31-8b, app.kubernetes.io/part-of: llm-serving }
+spec:
+  selector:
+    matchLabels: { serving.kserve.io/inferenceservice: llama31-8b }
+  targetPorts:
+    - number: 8000
+  endpointPickerRef:
+    name: llama31-8b-epp
+    port: { number: 9002 }

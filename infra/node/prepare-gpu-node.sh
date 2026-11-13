@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T1: chuẩn bị GPU node (Ubuntu 22.04/24.04). Chạy lại nhiều lần không sao.
+# Chuẩn bị GPU node (Ubuntu 22.04/24.04). Chạy lại nhiều lần không sao.
 # Driver NVIDIA phải có sẵn: cài driver cần reboot nên không làm tự động ở đây.
 set -euo pipefail
 

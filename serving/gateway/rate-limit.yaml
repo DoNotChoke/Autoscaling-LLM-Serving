@@ -11,11 +11,24 @@ spec:
     type: Global
     global:
       rules:
+        # Mọi rule khớp đều được áp, nên key loadtest phải bị loại khỏi rule này thì hạn mức riêng bên dưới mới có tác dụng
         - clientSelectors:
-            - headers: [{ name: x-client-id, type: Distinct }]
+            - headers:
+                - { name: x-client-id, type: Distinct }
+                - { name: x-client-id, type: Exact, value: loadtest, invert: true }
           limit: { requests: 100000, unit: Minute }
           cost:
             request: { from: Number, number: 0 } # chỉ kiểm tra hạn mức, không trừ khi request vào
+            response:
+              from: Metadata
+              metadata: { namespace: io.envoy.ai_gateway, key: llm_total_token }
+        # Key loadtest chỉ dùng đo tải (inference-perf, run-scenario.sh), không phát cho người dùng.
+        # 2 replica bão hoà ~140k token/phút; hạn mức cao để kết quả đo không lẫn 429
+        - clientSelectors:
+            - headers: [{ name: x-client-id, type: Exact, value: loadtest }]
+          limit: { requests: 10000000, unit: Minute }
+          cost:
+            request: { from: Number, number: 0 }
             response:
               from: Metadata
               metadata: { namespace: io.envoy.ai_gateway, key: llm_total_token }

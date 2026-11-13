@@ -1,0 +1,11 @@
+# Report của inference-perf; local-path gắn node-1, cùng node với Job (Job ngắn, chấp nhận gắn 1 node)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inference-perf-reports
+  labels: { app.kubernetes.io/part-of: llm-serving, app.kubernetes.io/component: loadtest }
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests: { storage: 2Gi }

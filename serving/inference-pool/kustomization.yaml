@@ -1,0 +1,8 @@
+# InferencePool + Endpoint Picker (EPP) cho llama31-8b. Cần trước: CRD platform/inference-extension/crds-v1.0.2.yaml,
+# Envoy Gateway có backendResources InferencePool (platform/envoy-gateway/values.yaml). Route: serving/gateway/route.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: llm-serving
+resources:
+  - inferencepool.yaml
+  - epp.yaml

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T2: cài k3s. Chạy sau prepare-gpu-node.sh.
+# Cài k3s. Chạy sau prepare-gpu-node.sh.
 #   Server (node đầu tiên):  install-k3s.sh [đường-dẫn-k3s-config.yaml]
 #   Agent (join cụm có sẵn): sudo K3S_URL=https://<ip-server>:6443 NODE_IP=<ip-lan-node-này> bash install-k3s.sh
 #     Token lấy trên server: sudo cat /var/lib/rancher/k3s/server/node-token

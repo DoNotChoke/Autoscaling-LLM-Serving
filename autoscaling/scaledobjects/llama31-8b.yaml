@@ -1,5 +1,4 @@
-# Autoscale predictor theo số request vLLM đang xử lý. InferenceService cần annotation
-# autoscalerClass: external để KServe không tạo HPA riêng. Giải thích chi tiết ở docs/adr/0002-autoscaling.md
+# InferenceService cần annotation autoscalerClass: external để KServe không tạo HPA riêng
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -35,8 +34,8 @@ spec:
       metadata:
         serverAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
         query: sum(llm_serving:vllm_concurrency:sum{namespace="llm-serving", model_name="llama31-8b"}) or vector(0)
-        # SLO TTFT p95 ≤ 2s: 1 replica giữ được 6 request, target 0,75 × 6 ≈ 4 (loadtest/results/2026-10-28-capacity-c4-c8)
-        threshold: "4"
+        # SLO TTFT p95 ≤ 2s, TPOT p95 ≤ 100ms: 1 replica giữ ~8,5 request đồng thời, target floor(0,75 × 8,5) = 6
+        threshold: "6"
     # Ít request nhưng prompt dài vẫn có thể làm đầy KV cache
     - type: prometheus
       name: kvcache

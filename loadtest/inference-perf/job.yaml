@@ -1,0 +1,60 @@
+# Một lần đo inference-perf. run.sh thay tên Job, CONFIG, RUN rồi apply; đứng riêng ngoài kustomization.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: inference-perf
+  namespace: llm-serving
+  labels: { app.kubernetes.io/part-of: llm-serving, app.kubernetes.io/component: loadtest }
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 7200
+  template:
+    metadata:
+      labels: { app.kubernetes.io/component: loadtest }
+    spec:
+      restartPolicy: Never
+      # Load generator tốn CPU: cố định ở node-1 để các lần đo so được với nhau
+      nodeSelector: { kubernetes.io/hostname: s12gbn3-system-product-name }
+      containers:
+        - name: inference-perf
+          image: quay.io/inference-perf/inference-perf:v0.7.0
+          workingDir: /workspace
+          # Key lấy từ Secret lúc chạy, không nằm trong ConfigMap (key là hex nên sed an toàn)
+          command:
+            - sh
+            - -c
+            - >-
+              mkdir -p "/reports/$RUN" &&
+              { [ ! -f /sharegpt/sharegpt-500.jsonl ] || python /configs/to_sharegpt.py /sharegpt/sharegpt-500.jsonl /tmp/sharegpt.json; } &&
+              sed -e "s/__API_KEY__/$API_KEY/" -e "s#__REPORT_DIR__#/reports/$RUN#"
+              -e "s/duration: \([0-9]*\)/duration: ${DURATION:-\1}/" -e "s/base_seed: \([0-9]*\)/base_seed: ${SEED:-\1}/" "/configs/$CONFIG.yaml" > /tmp/config.yml &&
+              python inference_perf/main.py --config_file /tmp/config.yml
+          env:
+            - { name: CONFIG, value: baseline-random }
+            - { name: RUN, value: baseline-random-manual }
+            # Rỗng = giữ thời gian stage của config (run.sh QUICK_DURATION)
+            - { name: DURATION, value: "" }
+            - { name: SEED, value: "" } # rỗng = giữ base_seed của config (run.sh SEED_OVERRIDE)
+            - name: API_KEY
+              valueFrom: { secretKeyRef: { name: loadtest-api-key, key: key } }
+          resources:
+            requests: { cpu: "2", memory: 2Gi }
+            limits: { cpu: "4", memory: 4Gi }
+          volumeMounts:
+            - { name: configs, mountPath: /configs, readOnly: true }
+            - { name: reports, mountPath: /reports }
+            - { name: tokenizer, mountPath: /models, subPath: models, readOnly: true }
+            - { name: sharegpt, mountPath: /sharegpt, readOnly: true }
+      volumes:
+        - name: configs
+          configMap: { name: inference-perf-configs }
+        - name: reports
+          persistentVolumeClaim: { claimName: inference-perf-reports }
+        # Dataset cho configs/sharegpt.yaml; optional để các config khác chạy được khi chưa có
+        - name: sharegpt
+          configMap: { name: inference-perf-sharegpt, optional: true }
+        # Tokenizer từ image model; run.sh thay model-image bằng reference của InferenceService đang chạy
+        - name: tokenizer
+          image:
+            reference: model-image
+            pullPolicy: IfNotPresent

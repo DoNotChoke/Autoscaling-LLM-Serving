@@ -1,11 +1,5 @@
+# Model đóng gói thành OCI image (package-model.sh) và mount bằng Image Volume ở serving/kserve
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: llm-serving
 resources:
   - namespace.yaml
-  - llama31-8b/pvc.yaml
-  - llama31-8b/download-job.yaml
-configMapGenerator:
-  - name: model-download-script
-    files:
-      - download-model.sh

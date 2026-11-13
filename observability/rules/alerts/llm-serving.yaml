@@ -1,0 +1,83 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    release: kube-prometheus-stack
+  name: llm-serving-alerts
+  namespace: monitoring
+spec:
+  groups:
+  - interval: 15s
+    name: llm-serving.alerts
+    rules:
+    - alert: VLLMDown
+      annotations:
+        description: Prometheus cannot scrape the llama31-8b predictor, or its target
+          has disappeared for 5 minutes.
+        summary: vLLM target is unavailable
+        runbook_url: docs/runbooks/serving.md
+      expr: |
+        up{job="monitoring/vllm",namespace="llm-serving"} == 0
+        or absent(up{job="monitoring/vllm",namespace="llm-serving"})
+      for: 5m
+      labels:
+        severity: critical
+    - alert: GPUXidError
+      annotations:
+        description: DCGM observed an XID error for GPU {{ $labels.UUID }} in its
+          reporting window.
+        summary: GPU XID error observed on {{ $labels.hostname }}
+        runbook_url: docs/runbooks/cluster-setup.md
+      expr: DCGM_EXP_XID_ERRORS_COUNT{job="nvidia-dcgm-exporter"} > 0
+      for: 1m
+      labels:
+        severity: critical
+    - alert: HighTTFT
+      annotations:
+        description: TTFT p95 for {{ $labels.model_name }} has exceeded 2 seconds (SLO) for
+          5 minutes.
+        summary: vLLM p95 time to first token exceeds 2 seconds
+        runbook_url: docs/runbooks/autoscaling.md
+      expr: llm_serving:vllm_ttft_seconds:p95{namespace="llm-serving",model_name="llama31-8b"}
+        > 2
+      for: 5m
+      labels:
+        severity: warning
+    - alert: KVCacheNearFull
+      annotations:
+        description: KV cache on {{ $labels.pod }} has exceeded 90% for 5 minutes.
+        summary: vLLM KV cache usage exceeds 90%
+        runbook_url: docs/runbooks/serving.md
+      expr: vllm:kv_cache_usage_perc{job="monitoring/vllm",namespace="llm-serving",model_name="llama31-8b"}
+        > 0.9
+      for: 5m
+      labels:
+        severity: warning
+    - alert: GatewayErrorRate
+      annotations:
+        description: More than 5% of Gateway requests have returned 5xx for 5 minutes
+          while traffic exceeds 0.1 requests/second.
+        summary: Gateway 5xx rate exceeds 5%
+        runbook_url: docs/runbooks/gateway.md
+      expr: |
+        llm_gateway:http_5xx_per_second:rate5m
+        / clamp_min(llm_gateway:requests_per_second:rate5m, 0.001) > 0.05
+        and llm_gateway:requests_per_second:rate5m > 0.1
+      for: 5m
+      labels:
+        severity: warning
+    - alert: PodCrashLooping
+      annotations:
+        description: Container {{ $labels.container }} in {{ $labels.pod }} has been
+          in CrashLoopBackOff for 5 minutes.
+        summary: vLLM predictor is crash looping
+        runbook_url: docs/runbooks/serving.md
+      expr: |
+        kube_pod_container_status_waiting_reason{
+          namespace="llm-serving",
+          pod=~"llama31-8b-predictor-.*",
+          reason="CrashLoopBackOff"
+        } == 1
+      for: 5m
+      labels:
+        severity: critical

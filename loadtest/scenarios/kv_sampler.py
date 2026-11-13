@@ -1,4 +1,4 @@
-"""Ghi KV cache usage, số request running/waiting của vLLM mỗi 2s (dùng cùng bench.sh)."""
+# Ghi KV cache usage, số request running/waiting của vLLM mỗi 2s (dùng cùng bench.sh)
 import time
 import urllib.request
 

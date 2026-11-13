@@ -1,0 +1,22 @@
+# Config + PVC report cho inference-perf; Job tạo bằng run.sh từ job.yaml.
+# ConfigMap dataset ShareGPT do run.sh tạo vì file nằm ngoài thư mục kustomize.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: llm-serving
+resources:
+  - pvc.yaml
+configMapGenerator:
+  - name: inference-perf-configs
+    files:
+      - configs/baseline-random.yaml
+      - configs/burst-multistage.yaml
+      - configs/decode-heavy.yaml
+      - configs/prefill-heavy.yaml
+      - configs/shared-prefix-high.yaml
+      - configs/shared-prefix-low.yaml
+      - configs/sharegpt.yaml
+      - configs/smoke.yaml
+      - to_sharegpt.py
+generatorOptions:
+  disableNameSuffixHash: true # job.yaml tham chiếu tên cố định
+  labels: { app.kubernetes.io/part-of: llm-serving, app.kubernetes.io/component: loadtest }

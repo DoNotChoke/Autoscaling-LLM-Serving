@@ -1,4 +1,4 @@
-# KEDA 2.21.0, cài theo docs/runbooks/autoscaling.md
+# KEDA 2.21.0
 # Cần bản >= 2.18 thì fallback mới chạy với trigger metricType Value
 
 # Mặc định chart cho mỗi pod tới 1 CPU / 1000Mi, lab không cần nhiều vậy

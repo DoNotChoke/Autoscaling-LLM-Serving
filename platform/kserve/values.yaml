@@ -1,5 +1,4 @@
 # KServe v0.21.0, chart kserve-resources (cài sau kserve-crd và cert-manager v1.21.2).
-# Xem lệnh cài trong docs/runbooks/serving.md.
 kserve:
   version: v0.21.0
   controller:
@@ -7,5 +6,5 @@ kserve:
     deploymentMode: Standard
     imagePullPolicy: IfNotPresent
     gateway:
-      # Chưa có ingress controller; sau này Envoy AI Gateway route thẳng tới Service predictor
+      # Không cần ingress: Envoy AI Gateway route thẳng tới Service predictor
       disableIngressCreation: true

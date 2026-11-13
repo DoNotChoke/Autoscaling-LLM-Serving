@@ -1,7 +1,18 @@
-# Cần apply serving/models trước (namespace, PVC có model) và Secret vllm-api-key
+# Cần trước: namespace (serving/models), Secret vllm-api-key, image model trên registry (serving/models/package-model.sh)
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: llm-serving
 resources:
   - runtimes/vllm.yaml
   - models/llama31-8b/inferenceservice.yaml
+  - models/llama31-8b/prepull.yaml
+# Digest image model chỉ khai báo một lần trong InferenceService; DaemonSet pre-pull dùng lại
+replacements:
+  - source:
+      kind: InferenceService
+      name: llama31-8b
+      fieldPath: spec.predictor.volumes.[name=model].image.reference
+    targets:
+      - select: { kind: DaemonSet, name: llama31-8b-prepull }
+        fieldPaths:
+          - spec.template.spec.containers.[name=prepull].image

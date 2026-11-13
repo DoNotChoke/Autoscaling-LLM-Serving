@@ -1,5 +1,4 @@
-# Luôn giữ ít nhất 1 pod khi drain node. Lúc chỉ có 1 replica thì drain sẽ bị chặn,
-# muốn bảo trì node đó thì scale lên 2 trước
+# Giữ ít nhất 1 pod khi drain node; chỉ có 1 replica thì scale lên 2 trước khi bảo trì
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

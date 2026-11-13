@@ -1,0 +1,31 @@
+# Giữ image model trên mọi node GPU: pull sẵn trước khi scale lên (chưa cache: 135 s, đã cache: 60 s) và
+# để kubelet không dọn image khi node chưa chạy predictor. Image lấy từ volume model của InferenceService (kustomization)
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: llama31-8b-prepull
+  labels: { model: llama31-8b, app.kubernetes.io/part-of: llm-serving }
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: llama31-8b-prepull }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: llama31-8b-prepull, model: llama31-8b }
+    spec:
+      nodeSelector: { nvidia.com/gpu.present: "true" }
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: prepull
+          image: model-image # thay bằng reference trong InferenceService
+          command: [sleep, infinity]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 1m, memory: 4Mi }
+            limits: { memory: 16Mi }

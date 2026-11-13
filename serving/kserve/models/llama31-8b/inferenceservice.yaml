@@ -26,8 +26,8 @@ spec:
     model:
       modelFormat: { name: vllm }
       runtime: vllm-openai
-      # PVC local-path chỉ dùng được trên 1 node, nên model được chép sẵn lên từng node
-      # (docs/runbooks/model-on-nodes.md). Mount ở /models vì KServe luôn tự thêm một mount ở /mnt/models
+      # Model là OCI image trên registry trong cụm (serving/models/package-model.sh), mount bằng Image Volume.
+      # KServe luôn tự mount /mnt/models nên dùng /models
       command: [vllm, serve, /models]
       args:
         - --served-model-name=llama31-8b
@@ -43,15 +43,17 @@ spec:
         - name: VLLM_API_KEY
           valueFrom:
             secretKeyRef: { name: vllm-api-key, key: key }
+        # Cache compile ra hostPath để pod sau trên cùng node không compile lại; vLLM tự tách thư mục theo hash config
+        - { name: VLLM_CACHE_ROOT, value: /vllm-cache }
       # Ghi port bằng số: không có storageUri thì KServe gắn thêm sidecar agent, mà agent không hiểu port "http"
-      # Load weights + compile mất ~2 phút; cho tối đa 10 phút trước khi coi là hỏng
+      # Khởi động ~1 phút, tối đa 10 phút (2s × 300); chu kỳ ngắn để pod Ready ngay khi vLLM sẵn sàng
       startupProbe:
         httpGet: { path: /health, port: 8000 }
-        periodSeconds: 10
-        failureThreshold: 60
+        periodSeconds: 2
+        failureThreshold: 300
       readinessProbe:
         httpGet: { path: /health, port: 8000 }
-        periodSeconds: 10
+        periodSeconds: 3
       # Ngưỡng rộng để không giết pod chỉ vì /health chậm khi đang chịu tải nặng
       livenessProbe:
         httpGet: { path: /health, port: 8000 }
@@ -67,12 +69,16 @@ spec:
         limits: { nvidia.com/gpu: "1", memory: 12Gi } # page cache khi load model bị chặn ở đây, kernel tự thu hồi (đã thử: 0 OOM)
       volumeMounts:
         - { name: shm, mountPath: /dev/shm }
-        - { name: model, mountPath: /models, readOnly: true }
+        - { name: model, mountPath: /models, subPath: models, readOnly: true }
+        - { name: vllm-cache, mountPath: /vllm-cache }
     volumes:
       - name: shm
         emptyDir: { medium: Memory, sizeLimit: 2Gi }
+      # Kubelet pull một lần mỗi node rồi giữ trong containerd; đổi model = đổi digest
       - name: model
-        hostPath: { path: /opt/models/llama31-8b, type: Directory }
-    # Chỉ chạy trên node đã có model
-    nodeSelector:
-      llm-serving/model-llama31-8b: "true"
+        image:
+          reference: 192.168.1.147:30500/models/llama31-8b@sha256:fac62d62a14e941dd6b1c75c2605396feead233faff69796b63fe9afcfd4a3bf
+          pullPolicy: IfNotPresent
+      # Mỗi node tự sinh cache ở lần khởi động đầu; xoá thư mục này là về cold start không cache
+      - name: vllm-cache
+        hostPath: { path: /opt/vllm-cache, type: DirectoryOrCreate }

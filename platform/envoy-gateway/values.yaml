@@ -21,6 +21,9 @@ config:
       enableBackend: true # AIServiceBackend trỏ tới Backend
     # AI Gateway chỉnh xDS do Envoy Gateway sinh ra
     extensionManager:
+      # AIGatewayRoute trỏ được tới InferencePool (serving/inference-pool)
+      backendResources:
+        - { group: inference.networking.k8s.io, kind: InferencePool, version: v1 }
       hooks:
         xdsTranslator:
           translation:

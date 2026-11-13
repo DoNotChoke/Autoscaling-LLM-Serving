@@ -1,12 +1,10 @@
-# Giữ N request stream chạy song song theo từng đoạn thời gian, dùng cho run-scenario.sh
+# Tạo tải stream theo từng đoạn thời gian, dùng cho run-scenario.sh
 # Mỗi request in một dòng CSV ra stdout, cuối mỗi đoạn in tóm tắt ra stderr
-# Usage: loadgen.py --profile 600:5,300:2 [--max-tokens 256] [--prompt-words 400]
-#   profile: các đoạn <giây>:<số request song song>, 0 là nghỉ
-# Env: BASE_URL (mặc định là gateway trong cluster), API_KEY, MODEL
 import argparse
 import asyncio
 import json
 import os
+import random
 import statistics
 import sys
 import time
@@ -18,24 +16,45 @@ API_KEY = os.environ["API_KEY"]
 MODEL = os.environ.get("MODEL", "llama31-8b")
 
 
-def parse_profile(text):
+def parse_profile(text, value=int):
     segments = []
     for part in text.split(","):
-        seconds, conc = part.split(":")
-        segments.append((int(seconds), int(conc)))
+        seconds, v = part.split(":")
+        segments.append((int(seconds), value(v)))
     return segments
 
 
+def parse_range(text):
+    lo, hi = (int(x) for x in text.split(":"))
+    assert 0 < lo <= hi, f"range sai: {text}"
+    return lo, hi
+
+
+def pick(args):
+    if args.max_tokens_range or args.prompt_words_range:
+        mt = random.randint(*args.max_tokens_range) if args.max_tokens_range else args.max_tokens
+        pw = random.randint(*args.prompt_words_range) if args.prompt_words_range else args.prompt_words
+        return mt, pw, False  # độ dài ngẫu nhiên thì để model tự dừng như traffic thật
+    return args.max_tokens, args.prompt_words, True  # độ dài output cố định để tải ổn định
+
+
+def emit(start, segment, status, ok, ttft, e2e, error, max_tokens, prompt_words):
+    print(f"{start:.3f},{segment},{status},{int(ok)},{f'{ttft:.3f}' if ttft is not None else ''},{e2e:.3f},{error},"
+          f"{max_tokens},{prompt_words}", flush=True)
+
+
 async def one_request(session, args, segment, rows):
+    max_tokens, prompt_words, ignore_eos = pick(args)
     # Thêm timestamp vào prompt để prefix cache không làm TTFT đẹp hơn thực tế
-    words = f"{time.time_ns()} " + "Kubernetes autoscaling vLLM GPU " * (args.prompt_words // 4)
+    words = f"{time.time_ns()} " + "Kubernetes autoscaling vLLM GPU " * (prompt_words // 4)
     body = {
         "model": MODEL,
         "stream": True,
-        "max_tokens": args.max_tokens,
+        "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": words + "\nTóm tắt đoạn trên."}],
-        "ignore_eos": True,  # độ dài output cố định để tải ổn định
     }
+    if ignore_eos:
+        body["ignore_eos"] = True
     start = time.time()
     ttft = None
     status = 0
@@ -60,8 +79,7 @@ async def one_request(session, args, segment, rows):
     end = time.time()
     ok = status == 200 and not error
     rows.append((segment, ok, ttft))
-    print(f"{start:.3f},{segment},{status},{int(ok)},{f'{ttft:.3f}' if ttft is not None else ''},{end - start:.3f},{error}",
-          flush=True)
+    emit(start, segment, status, ok, ttft, end - start, error, max_tokens, prompt_words)
 
 
 async def worker(session, args, segment, deadline, rows):
@@ -69,21 +87,55 @@ async def worker(session, args, segment, deadline, rows):
         await one_request(session, args, segment, rows)
 
 
+async def open_loop(session, args, segment, seconds, rate, rows, inflight):
+    deadline = time.time() + seconds
+    while True:
+        await asyncio.sleep(random.expovariate(rate))
+        if time.time() >= deadline:
+            return
+        if len(inflight) >= args.max_inflight:
+            # Không chờ chỗ trống: chờ sẽ làm tốc độ gửi giảm theo hệ thống (coordinated omission)
+            rows.append((segment, False, None))
+            emit(time.time(), segment, 0, False, None, 0.0, "client_overflow", *pick(args)[:2])
+            continue
+        task = asyncio.create_task(one_request(session, args, segment, rows))
+        inflight.add(task)
+        task.add_done_callback(inflight.discard)
+
+
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--profile")
+    mode.add_argument("--rate-profile")
     parser.add_argument("--max-tokens", type=int, default=256)
     parser.add_argument("--prompt-words", type=int, default=400)
+    parser.add_argument("--max-tokens-range", type=parse_range)
+    parser.add_argument("--prompt-words-range", type=parse_range)
+    parser.add_argument("--max-inflight", type=int, default=512)
+    parser.add_argument("--seed", type=int)
     args = parser.parse_args()
+    random.seed(args.seed)
 
     rows = []
-    print("start_ts,segment,status,ok,ttft_s,e2e_s,error", flush=True)
+    print("start_ts,segment,status,ok,ttft_s,e2e_s,error,max_tokens,prompt_words", flush=True)
     timeout = aiohttp.ClientTimeout(total=600)
     # Mỗi request một kết nối mới. Giữ kết nối thì Service ClusterIP dồn hết vào pod cũ,
     # pod mới scale lên không nhận được request nào
     connector = aiohttp.TCPConnector(force_close=True)
     async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-        for i, (seconds, conc) in enumerate(parse_profile(args.profile)):
+        if args.rate_profile:
+            inflight = set()
+            for i, (seconds, rate) in enumerate(parse_profile(args.rate_profile, float)):
+                print(f"[{time.strftime('%H:%M:%S')}] đoạn {i}: {seconds}s, {rate} req/s", file=sys.stderr, flush=True)
+                if rate <= 0:
+                    await asyncio.sleep(seconds)
+                else:
+                    await open_loop(session, args, i, seconds, rate, rows, inflight)
+            # Hết giờ thì không gửi thêm, request đang chạy vẫn để chạy xong
+            if inflight:
+                await asyncio.gather(*inflight)
+        for i, (seconds, conc) in enumerate(parse_profile(args.profile) if args.profile else []):
             print(f"[{time.strftime('%H:%M:%S')}] đoạn {i}: {seconds}s, concurrency {conc}", file=sys.stderr, flush=True)
             deadline = time.time() + seconds
             if conc == 0:

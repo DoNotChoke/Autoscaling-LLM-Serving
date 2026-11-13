@@ -6,11 +6,21 @@ spec:
   parentRefs:
     - { group: gateway.networking.k8s.io, kind: Gateway, name: llm-gateway }
   rules:
-    # AI Gateway tự lấy trường "model" trong body đưa vào header x-ai-eg-model
+    # Đường lui / A/B: thêm header x-route-legacy: 1 thì đi đường cũ (Service ClusterIP, chia theo kết nối TCP).
+    # Gateway API ưu tiên rule có nhiều header match hơn, nên rule này thắng rule mặc định khi có header
+    - matches:
+        - headers:
+            - { type: Exact, name: x-ai-eg-model, value: llama31-8b }
+            - { type: Exact, name: x-route-legacy, value: "1" }
+      backendRefs:
+        - name: llama31-8b
+      timeouts:
+        request: 300s
+    # Mặc định: EPP chọn pod theo từng request (serving/inference-pool). AI Gateway lấy "model" trong body vào x-ai-eg-model
     - matches:
         - headers: [{ type: Exact, name: x-ai-eg-model, value: llama31-8b }]
       backendRefs:
-        - name: llama31-8b
+        - { group: inference.networking.k8s.io, kind: InferencePool, name: llama31-8b }
       # Mặc định 60s; request không stream sinh dài cần lâu hơn
       timeouts:
         request: 300s

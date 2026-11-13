@@ -1,0 +1,37 @@
+# Vào ngắn ~256, ra dài ~1024 token: bão hoà ở decode, đo TPOT.
+# __API_KEY__, __REPORT_DIR__ do Job thay lúc chạy; không ghi key vào file này.
+api:
+  type: completion
+  streaming: true
+  headers:
+    x-slo-ttft-ms: "2000"
+    x-slo-tpot-ms: "100"
+server:
+  type: vllm
+  model_name: llama31-8b
+  base_url: http://llm-gateway-envoy.envoy-gateway-system.svc
+  api_key: __API_KEY__
+  ignore_eos: true
+tokenizer:
+  pretrained_model_name_or_path: /models
+data:
+  type: random
+  input_distribution: { min: 179, max: 333, mean: 256, std_dev: 51, total_count: 500 }
+  output_distribution: { min: 717, max: 1331, mean: 1024, std_dev: 205, total_count: 500 }
+load:
+  type: poisson
+  base_seed: 1000
+  stages:
+    - { rate: 0.25, duration: 180 }
+    - { rate: 0.5, duration: 180 }
+    - { rate: 0.75, duration: 180 }
+    - { rate: 1, duration: 180 }
+report:
+  request_lifecycle:
+    summary: true
+    per_stage: true
+    per_request: true
+    percentiles: [50, 90, 95, 99]
+storage:
+  local_storage:
+    path: __REPORT_DIR__

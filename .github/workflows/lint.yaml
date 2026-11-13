@@ -24,14 +24,14 @@ jobs:
       - name: Kustomize build + kubeconform
         run: |
           set -euo pipefail
-          for dir in serving/models serving/kserve serving/gateway serving/open-webui platform/redis platform/cloudflared autoscaling/scaledobjects autoscaling/pdb; do
+          for dir in serving/models serving/kserve serving/gateway serving/open-webui platform/redis platform/cloudflared autoscaling/scaledobjects autoscaling/pdb observability/rules/recording observability/rules/alerts observability/dashboards loadtest/inference-perf serving/inference-pool platform/registry; do
             echo "::group::$dir"
             kubectl kustomize "$dir" | kubeconform -strict -summary \
               -schema-location default -schema-location "$CRD_SCHEMAS" -ignore-missing-schemas
             echo "::endgroup::"
           done
           kubeconform -strict -summary -schema-location default -schema-location "$CRD_SCHEMAS" \
-            -ignore-missing-schemas serving/dev/ infra/node/gpu-test-pod.yaml serving/open-webui/tunnel.yaml
+            -ignore-missing-schemas infra/node/gpu-test-pod.yaml serving/open-webui/tunnel.yaml loadtest/inference-perf/job.yaml platform/inference-extension/crds-v1.0.2.yaml
 
   scripts:
     runs-on: ubuntu-24.04
@@ -39,3 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: shellcheck
         run: git ls-files '*.sh' | xargs shellcheck
+      - name: Test Python (assert, không cần thư viện ngoài)
+        run: |
+          set -euo pipefail
+          (cd loadtest/compare && python3 test_capacity_report.py && python3 test_ip_report.py)

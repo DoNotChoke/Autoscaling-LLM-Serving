@@ -1,0 +1,68 @@
+# ScaledObject và dashboard dùng các rule này: không đổi tên record
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    release: kube-prometheus-stack
+  name: serving-gateway-recording-rules
+  namespace: monitoring
+spec:
+  groups:
+  - interval: 15s
+    name: serving.vllm
+    rules:
+    - expr: |
+        histogram_quantile(0.50,
+          sum by (le, namespace, model_name) (
+            rate(vllm:time_to_first_token_seconds_bucket{job="monitoring/vllm"}[5m])
+          )
+        )
+      record: llm_serving:vllm_ttft_seconds:p50
+    - expr: |
+        histogram_quantile(0.95,
+          sum by (le, namespace, model_name) (
+            rate(vllm:time_to_first_token_seconds_bucket{job="monitoring/vllm"}[5m])
+          )
+        )
+      record: llm_serving:vllm_ttft_seconds:p95
+    - expr: |
+        histogram_quantile(0.95,
+          sum by (le, namespace, model_name) (
+            rate(vllm:inter_token_latency_seconds_bucket{job="monitoring/vllm"}[5m])
+          )
+        )
+      record: llm_serving:vllm_inter_token_latency_seconds:p95
+    - expr: |
+        sum by (namespace, model_name) (
+          rate(vllm:generation_tokens_total{job="monitoring/vllm"}[5m])
+        )
+      record: llm_serving:vllm_generation_tokens_per_second:rate5m
+    - expr: |
+        sum by (namespace, model_name) (
+          vllm:num_requests_running{job="monitoring/vllm"}
+          + vllm:num_requests_waiting{job="monitoring/vllm"}
+        )
+      record: llm_serving:vllm_concurrency:sum
+  - interval: 15s
+    name: serving.gateway
+    rules:
+    - expr: |
+        sum(rate(envoy_http_downstream_rq_completed{
+          job="monitoring/llm-gateway-envoy",
+          envoy_http_conn_manager_prefix="http-10080"
+        }[5m]))
+      record: llm_gateway:requests_per_second:rate5m
+    - expr: |
+        sum(rate(envoy_http_downstream_rq_xx{
+          job="monitoring/llm-gateway-envoy",
+          envoy_http_conn_manager_prefix="http-10080",
+          envoy_response_code_class="4"
+        }[5m]))
+      record: llm_gateway:http_4xx_per_second:rate5m
+    - expr: |
+        sum(rate(envoy_http_downstream_rq_xx{
+          job="monitoring/llm-gateway-envoy",
+          envoy_http_conn_manager_prefix="http-10080",
+          envoy_response_code_class="5"
+        }[5m]))
+      record: llm_gateway:http_5xx_per_second:rate5m

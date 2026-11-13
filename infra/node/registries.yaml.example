@@ -1,0 +1,12 @@
+# containerd của k3s pull image model từ registry trong cụm (platform/registry). Copy vào /etc/rancher/k3s/registries.yaml
+# trên MỌI node (quyền 600, chứa mật khẩu), rồi restart k3s / k3s-agent (KillMode=process: pod đang chạy không bị tắt).
+# Lấy user/pass: kubectl -n registry get secret registry-auth -o jsonpath='{.data.password}' | base64 -d
+mirrors:
+  "192.168.1.147:30500":
+    endpoint:
+      - "http://192.168.1.147:30500"
+configs:
+  "192.168.1.147:30500":
+    auth:
+      username: llm
+      password: "<mật khẩu>"
