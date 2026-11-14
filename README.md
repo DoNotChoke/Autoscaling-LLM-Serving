@@ -110,6 +110,13 @@ Digest chỉ khai báo một chỗ, trong InferenceService. Kustomize `replaceme
   - `run-scenario.sh` + `loadgen.py` chạy các kịch bản tải S1–S6, `watch.sh` ghi timeline replica và metric.
 - **`loadtest/compare`**: script tổng hợp kết quả (`capacity_report`, `ip_report`).
 
+## Số liệu
+
+- [Sức chứa 1 replica, cold start](serving/kserve/README.md)
+- [EPP so với ClusterIP](serving/inference-pool/README.md)
+- [Autoscaling S1–S6](autoscaling/README.md)
+- [Model storage](serving/models/README.md)
+
 ## Cấu trúc repo
 
 ```
